@@ -48,7 +48,7 @@
       <div class="card-title">
         <span class="dot" style="background:linear-gradient(135deg,#4facfe,#00f2fe)"></span>
         Step 2: 五层拆解
-      </el-form>
+      </div>
       <el-form :model="dismantleForm" label-width="100px">
         <!-- L1 主题层 -->
         <div class="layer-header l1">L1 主题层</div>

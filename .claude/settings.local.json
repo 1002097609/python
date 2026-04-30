@@ -31,7 +31,9 @@
       "Bash(Rename-Item D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\routes\\\\skeleton.py skeleton_router.py)",
       "Bash(Rename-Item D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\routes\\\\fission.py fission_router.py)",
       "Bash(curl -s http://localhost:8001/)",
-      "Bash(curl -s http://localhost:8001/docs)"
+      "Bash(curl -s http://localhost:8001/docs)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s http://localhost:5173/src/views/Dismantle.vue)"
     ]
   }
 }
