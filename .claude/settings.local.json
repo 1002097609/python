@@ -6,7 +6,32 @@
       "Bash(python rich_pages.py)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(npm *)",
+      "Bash(Get-Service -Name MySQL* -ErrorAction SilentlyContinue)",
+      "Bash(Format-Table Name, Status -AutoSize)",
+      "Bash(cmd *)",
+      "Bash(python *)",
+      "Bash(backend\\\\.venv\\\\Scripts\\\\pip install *)",
+      "Bash(backend/.venv/Scripts/pip install *)",
+      "Bash(.venv/Scripts/python -c \"from database import init_db; init_db\\(\\); print\\('数据库初始化成功'\\)\")",
+      "Bash(.venv/Scripts/uvicorn main:app --reload --host 0.0.0.0 --port 8000)",
+      "Bash(curl -s http://localhost:8000/)",
+      "Bash(curl -s http://localhost:8000/docs)",
+      "Bash(Start-Process -FilePath \"D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\.venv\\\\Scripts\\\\uvicorn.exe\" -ArgumentList \"main:app\",\"--reload\",\"--host\",\"0.0.0.0\",\"--port\",\"8000\" -WorkingDirectory \"D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\" -WindowStyle Hidden)",
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Invoke-RestMethod -Uri \"http://localhost:8000/\")",
+      "Bash(D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\.venv\\\\Scripts\\\\python.exe -m uvicorn main:app --reload --host 0.0.0.0 --port 8000)",
+      "Bash(backend/.venv/Scripts/python.exe -m uvicorn main:app --reload --host 0.0.0.0 --port 8000)",
+      "Bash(pwsh *)",
+      "Bash(D:/claude_demo/demo2/demo/backend/.venv/Scripts/python.exe *)",
+      "Bash(Get-ChildItem *)",
+      "Bash(Rename-Item D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\routes\\\\material.py material_router.py)",
+      "Bash(Rename-Item D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\routes\\\\dismantle.py dismantle_router.py)",
+      "Bash(Rename-Item D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\routes\\\\skeleton.py skeleton_router.py)",
+      "Bash(Rename-Item D:\\\\claude_demo\\\\demo2\\\\demo\\\\backend\\\\routes\\\\fission.py fission_router.py)",
+      "Bash(curl -s http://localhost:8001/)",
+      "Bash(curl -s http://localhost:8001/docs)"
     ]
   }
 }
