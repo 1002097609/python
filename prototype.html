@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素材拆解与裂变系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#1a1a2e}
+.navbar{background:linear-gradient(135deg,#667eea,#764ba2);padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between}
+.logo{color:#fff;font-size:18px;font-weight:700}
+.logo em{font-size:12px;opacity:.7;margin-left:8px;font-style:normal}
+.nav-tabs{display:flex;gap:4px}
+.nav-tab{padding:8px 20px;border-radius:8px 8px 0 0;color:rgba(255,255,255,.7);cursor:pointer;font-size:14px;transition:all .2s}
+.nav-tab.active{background:#f0f2f5;color:#667eea;font-weight:600}
+.nav-tab:hover:not(.active){color:#fff;background:rgba(255,255,255,.1)}
+.page{display:none;padding:24px 32px;min-height:calc(100vh - 60px)}
+.page.active{display:block}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:24px;margin-bottom:20px}
+.card-title{font-size:15px;font-weight:600;color:#333;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.card-title .dot{width:10px;height:10px;border-radius:50%}
+textarea.raw-input{border:2px dashed #d9d9d9;border-radius:10px;padding:20px;min-height:140px;font-size:14px;color:#555;line-height:1.8;width:100%;outline:0;background:#fafafa;resize:vertical;transition:border-color .2s;font-family:inherit}
+textarea.raw-input:focus{border-color:#667eea;background:#fff}
+.btn{padding:10px 24px;border-radius:8px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(102,126,234,.4)}
+.btn-green{background:linear-gradient(135deg,#43e97b,#38f9d7);color:#fff}
+.btn-green:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(67,233,123,.4)}
+.btn-secondary{background:#f5f5f5;color:#666}
+.btn-secondary:hover{background:#eee}
+.btn-row{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
+.layer-list{display:flex;flex-direction:column;gap:12px}
+.layer-item{display:flex;border-radius:10px;overflow:hidden;border:1px solid #e8e8e8;transition:box-shadow .2s}
+.layer-item:hover{box-shadow:0 2px 10px rgba(0,0,0,.1)}
+.layer-badge{min-width:56px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.b1{background:linear-gradient(135deg,#667eea,#764ba2)}
+.b2{background:linear-gradient(135deg,#f093fb,#f5576c)}
+.b3{background:linear-gradient(135deg,#4facfe,#00f2fe)}
+.b4{background:linear-gradient(135deg,#43e97b,#38f9d7)}
+.b5{background:linear-gradient(135deg,#fa709a,#fee140)}
+.b6{background:linear-gradient(135deg,#ff9a9e,#fecfef)}
+.layer-body{flex:1;padding:16px}
+.layer-name{font-size:14px;font-weight:600;color:#333;margin-bottom:3px}
+.layer-desc{font-size:12px;color:#999;margin-bottom:8px}
+.layer-content{font-size:13px;color:#555;line-height:1.8}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tag{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.tag.purple{background:#f0ebfd;color:#764ba2}
+.tag.green{background:#e6f9f0;color:#27ae60}
+.tag.orange{background:#fff3e6;color:#e67e22}
+.tag.blue{background:#e6f0ff;color:#2980b9}
+.tag.red{background:#ffe6e6;color:#e74c3c}
+.tag.gray{background:#f5f5f5;color:#666}
+.tag.pink{background:#fff0f6;color:#c2185b}
+.divider{height:1px;background:#eee;margin:20px 0}
+.skel-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.skel-block{height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff}
+.s1{background:linear-gradient(135deg,#667eea,#764ba2);width:15%}
+.s2{background:linear-gradient(135deg,#4facfe,#00f2fe);width:60%}
+.s3{background:linear-gradient(135deg,#43e97b,#38f9d7);width:25%}
+.skel-label{font-size:12px;color:#999;min-width:100px}
+.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.mode-card{border:2px solid #e8e8e8;border-radius:12px;padding:24px 20px;cursor:pointer;transition:all .2s;text-align:center}
+.mode-card:hover{border-color:#667eea;box-shadow:0 4px 16px rgba(102,126,234,.15);transform:translateY(-2px)}
+.mode-card.selected{border-color:#667eea;background:#f8f7ff}
+.mode-icon{font-size:36px;margin-bottom:12px}
+.mode-name{font-size:14px;font-weight:600;color:#333;margin-bottom:6px}
+.mode-desc{font-size:12px;color:#999;line-height:1.6}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-group{display:flex;flex-direction:column;gap:6px}
+.form-group.full{grid-column:1/-1}
+.form-label{font-size:13px;font-weight:600;color:#555}
+.form-input{border:1px solid #ddd;border-radius:8px;padding:10px 14px;font-size:13px;outline:0;transition:border-color .2s;background:#fafafa;font-family:inherit}
+.form-input:focus{border-color:#667eea;background:#fff}
+.form-textarea{min-height:80px;resize:vertical}
+.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.result-card{border:1px solid #e8e8e8;border-radius:10px;padding:18px;transition:all .2s;position:relative}
+.result-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.1)}
+.result-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.result-id{font-size:12px;color:#bbb}
+.result-badge{font-size:11px;padding:2px 10px;border-radius:10px}
+.result-badge.draft{background:#fff3e6;color:#e67e22}
+.result-badge.ready{background:#e6f9f0;color:#27ae60}
+.result-badge.predicted{background:#e6f0ff;color:#2980b9}
+.result-text{font-size:13px;color:#555;line-height:1.8}
+.result-effect{margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0;font-size:12px;color:#999}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);text-align:center}
+.stat-num{font-size:30px;font-weight:700;margin-bottom:4px}
+.stat-num.purple{color:#667eea}
+.stat-num.green{color:#27ae60}
+.stat-num.orange{color:#e67e22}
+.stat-num.blue{color:#2980b9}
+.stat-label{font-size:13px;color:#999}
+.lib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.lib-card{border:1px solid #e8e8e8;border-radius:10px;padding:18px;cursor:pointer;transition:all .2s}
+.lib-card:hover{border-color:#667eea;box-shadow:0 3px 12px rgba(102,126,234,.15);transform:translateY(-2px)}
+.lib-card.selected{border-color:#667eea;background:#f8f7ff}
+.lib-title{font-size:14px;font-weight:600;color:#333;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-excerpt{font-size:12px;color:#999;line-height:1.7;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.lib-meta{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.skel-lib-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.skel-card{border:1px solid #e8e8e8;border-radius:10px;padding:18px;transition:all .2s}
+.skel-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.1)}
+.skel-card-title{font-size:14px;font-weight:600;color:#333;margin-bottom:6px}
+.skel-src{font-size:11px;color:#bbb;margin-bottom:12px}
+.skel-structure{background:#f8f9fa;border-radius:8px;padding:14px;margin-bottom:10px}
+.skel-part{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.skel-bar{height:28px;border-radius:4px;display:flex;align-items:center;padding:0 10px;font-size:11px;font-weight:600;color:#fff}
+.skel-bar.a{background:linear-gradient(135deg,#667eea,#764ba2)}
+.skel-bar.b{background:linear-gradient(135deg,#4facfe,#00f2fe)}
+.skel-bar.c{background:linear-gradient(135deg,#43e97b,#38f9d7)}
+.skel-part-label{font-size:11px;color:#999;min-width:60px}
+.skel-usage{font-size:12px;color:#bbb}
+.toast{position:fixed;top:80px;right:32px;background:#333;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+.data-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.data-chip.up{background:#e6f9f0;color:#27ae60}
+.data-chip.down{background:#ffe6e6;color:#e74c3c}
+.data-chip.neutral{background:#f0f0f0;color:#666}
+.data-chip.warn{background:#fff3e6;color:#e67e22}
+.effect-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.effect-item{background:#f8f9fa;border-radius:8px;padding:12px;text-align:center}
+.effect-val{font-size:20px;font-weight:700;margin-bottom:2px}
+.effect-key{font-size:11px;color:#999}
+.effect-compare{font-size:10px;margin-top:4px}
+.chain-box{display:flex;align-items:center;gap:4px;padding:12px 0;overflow-x:auto}
+.chain-step{display:flex;flex-direction:column;align-items:center;min-width:80px;cursor:pointer}
+.chain-step .icon{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:6px}
+.chain-step .label{font-size:11px;color:#666;text-align:center;line-height:1.3}
+.chain-arrow{color:#ccc;font-size:16px;flex-shrink:0;padding:0 2px;margin-bottom:22px}
+.chain-step.active .icon{box-shadow:0 0 0 3px rgba(102,126,234,.3)}
+.chain-step.active .label{color:#667eea;font-weight:600}
+.insight-box{background:linear-gradient(135deg,#f8f7ff,#f0f4ff);border:1px solid #e0e0ff;border-radius:10px;padding:16px;margin-top:16px}
+.insight-title{font-size:13px;font-weight:600;color:#667eea;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.insight-list{font-size:13px;color:#555;line-height:2}
+.insight-list li::marker{color:#667eea}
+.reason-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
+.reason-row:last-child{border-bottom:none}
+.reason-idx{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.reason-idx.r1{background:#667eea}
+.reason-idx.r2{background:#4facfe}
+.reason-idx.r3{background:#43e97b}
+.flow-summary{display:flex;align-items:center;gap:12px;padding:16px;background:#f8f9fa;border-radius:10px;margin-bottom:16px;font-size:13px;color:#666}
+.flow-from{background:#e6f0ff;color:#2980b9;padding:4px 12px;border-radius:6px;font-weight:600}
+.flow-to{background:#e6f9f0;color:#27ae60;padding:4px 12px;border-radius:6px;font-weight:600}
+.flow-arrow{color:#ccc;font-size:24px}
+.badge-hot{background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-cold{background:#e6f0ff;color:#2980b9;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+@media(max-width:768px){.mode-grid,.result-grid,.lib-grid,.skel-lib-grid,.effect-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:1fr}.nav-tab{padding:8px 12px;font-size:12px}}
+</style>
+</head>
+<body>
+<div class="navbar">
+  <div class="logo">&#127795; 素材拆解与裂变系统 <em>v1.0 原型</em></div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="switchPage('pg-dismantle',this)">&#128208; 素材拆解</div>
+    <div class="nav-tab" onclick="switchPage('pg-library',this)">&#128218; 素材库</div>
+    <div class="nav-tab" onclick="switchPage('pg-fission',this)">&#9889; 素材裂变</div>
+    <div class="nav-tab" onclick="switchPage('pg-skeleton',this)">&#129518; 骨架库</div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+function switchPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+function selectCard(el){
+  el.closest('.lib-grid').querySelectorAll('.lib-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function selectMode(el){
+  el.closest('.mode-grid').querySelectorAll('.mode-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2000);
+}
+function selectMaterialType(el){
+  const tabs = el.parentElement.querySelectorAll('div');
+  tabs.forEach(t => {
+    t.style.background = '#f5f5f5';
+    t.style.color = '#666';
+  });
+  el.style.background = 'linear-gradient(135deg,#667eea,#764ba2)';
+  el.style.color = '#fff';
+}
+function fillExample(){
+  document.getElementById('rawMaterial').value='家们！这个面霜我真的用了整整一个月才来反馈的！\n\n之前我的脸一到秋冬就起皮、卡粉，底妆根本扒不住。朋友推荐了这个含神经酰胺的面霜，抱着试试的心态用了一周，真的绝了——\n\n第一天：上脸不油腻，吸收快\n第七天：起皮明显减少，底妆贴服了\n第三十天：皮肤状态稳定了很多，连毛孔都细腻了\n\n成分党看过来：3%神经酰胺+2%玻尿酸+角鲨烷，都是修护屏障的核心成分。不含酒精香精，敏感肌也能用。\n\n一瓶200多，能用两个月，幷均一天3块多，比那些大牌平替划算多了！\n\n同款面霜放评论区了，想入的姐妹冲！';
+}
+function analyzeMaterial(){
+  const raw=document.getElementById('rawMaterial').value.trim();
+  if(!raw){showToast('请先输入素材内容');return}
+  showToast('AI拆解中...');
+  setTimeout(()=>{
+    document.getElementById('dismantleResult').style.display='block';
+    showToast('拆解完成！');
+  },800);
+}
+function runFission(){
+  showToast('裂变生成中...');
+  setTimeout(()=>{
+    document.getElementById('fissionResult').style.display='block';
+    showToast('已生成4条裂变素材');
+  },1000);
+}
+</script>
+
+<!-- ==================== PAGE 1: 素材拆解 ==================== -->
+<div id="pg-dismantle" class="page active">
+
+  <!-- 业务上下文说明 -->
+  <div style="background:linear-gradient(135deg,#f8f7ff,#f0f4ff);border:1px solid #e0e0ff;border-radius:12px;padding:16px 24px;margin-bottom:20px;font-size:13px;color:#555;line-height:1.8">
+    <strong style="color:#667eea">&#128161; 业务说明</strong> &mdash; 本系统服务于抖音广告效果投放的核心闭环：
+    <strong>素材生产 &#8594; 投放跑量 &#8594; 数据复盘 &#8594; 经验沉淀 &#8594; 素材衍化</strong>。
+    拆解的目的是找到"为什么这个素材能跑出来"，裂变的目的是把成功经验快速复用到新素材上。
+  </div>
+
+  <!-- 素材类型选择 + 输入区 -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#667eea"></span>选择素材类型</div>
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div onclick="selectMaterialType(this)" style="padding:8px 20px;border-radius:8px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:13px;font-weight:600;cursor:pointer">&#127908; 短视频脚本</div>
+      <div onclick="selectMaterialType(this)" style="padding:8px 20px;border-radius:8px;background:#f5f5f5;color:#666;font-size:13px;font-weight:600;cursor:pointer">&#128203; 图文种草</div>
+      <div onclick="selectMaterialType(this)" style="padding:8px 20px;border-radius:8px;background:#f5f5f5;color:#666;font-size:13px;font-weight:600;cursor:pointer">&#128378; 直播话术</div>
+    </div>
+    <div class="card-title" style="margin-top:8px;margin-bottom:12px"><span class="dot" style="background:#4facfe"></span>录入原始素材</div>
+    <textarea class="raw-input" id="rawMaterial" placeholder="在此粘贴抖音广告素材内容（文案/脚本/图文）...&#10;&#10;点下方「填入示例」可体验一条真实投放素材..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="analyzeMaterial()">&#128269; 智能拆解</button>
+      <button class="btn btn-secondary" onclick="fillExample()">&#128203; 填入示例</button>
+      <button class="btn btn-secondary" onclick="showToast('批量导入开发中')">&#128206; 批量导入</button>
+    </div>
+  </div>
+
+  <!-- 拆解结果 -->
+  <div class="card" id="dismantleResult" style="display:none">
+    <div class="card-title"><span class="dot" style="background:#4facfe"></span>拆解结果 &mdash; 6层模型</div>
+
+    <!-- L0: 投放效果数据层 -->
+    <div style="background:linear-gradient(135deg,#fff9f0,#fff3e6);border:1px solid #ffe0b2;border-radius:10px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600;color:#e67e22">&#128202; L0 &middot; 投放效果数据 <span style="font-size:11px;color:#bbb;font-weight:400">（数据来源：巨量引擎后台 &middot; 近7天）</span></div>
+        <span class="badge-hot">&#128293; 爆款素材</span>
+      </div>
+      <div class="effect-grid">
+        <div class="effect-item">
+          <div class="effect-val" style="color:#27ae60">3.2%</div>
+          <div class="effect-key">点击率(CTR)</div>
+          <div class="effect-compare"><span class="data-chip up">&#8593; 高于均值42%</span></div>
+        </div>
+        <div class="effect-item">
+          <div class="effect-val" style="color:#667eea">&#165;1.8</div>
+          <div class="effect-key">单次转化成本</div>
+          <div class="effect-compare"><span class="data-chip up">&#8595; 低于均值28%</span></div>
+        </div>
+        <div class="effect-item">
+          <div class="effect-val" style="color:#e67e22">&#165;58万</div>
+          <div class="effect-key">总消耗</div>
+          <div class="effect-compare"><span class="data-chip neutral">投放7天</span></div>
+        </div>
+        <div class="effect-item">
+          <div class="effect-val" style="color:#c2185b">4.6x</div>
+          <div class="effect-key">ROI</div>
+          <div class="effect-compare"><span class="data-chip up">&#8593; 高于均值65%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 业务闭环位置 -->
+    <div class="chain-box" style="margin-bottom:20px">
+      <div class="chain-step" style="opacity:.5">
+        <div class="icon" style="background:#f0f0f0">&#127912;</div>
+        <div class="label">素材生产</div>
+      </div>
+      <div class="chain-arrow">&#8594;</div>
+      <div class="chain-step" style="opacity:.5">
+        <div class="icon" style="background:#f0f0f0">&#128200;</div>
+        <div class="label">投放跑量</div>
+      </div>
+      <div class="chain-arrow">&#8594;</div>
+      <div class="chain-step active">
+        <div class="icon" style="background:#e6f0ff">&#128269;</div>
+        <div class="label">拆解复盘</div>
+      </div>
+      <div class="chain-arrow">&#8594;</div>
+      <div class="chain-step" style="opacity:.5">
+        <div class="icon" style="background:#f0f0f0">&#129518;</div>
+        <div class="label">经验沉淀</div>
+      </div>
+      <div class="chain-arrow">&#8594;</div>
+      <div class="chain-step" style="opacity:.5">
+        <div class="icon" style="background:#f0f0f0">&#9889;</div>
+        <div class="label">素材衍化</div>
+      </div>
+    </div>
+
+    <!-- L1-L5 拆解 -->
+    <div class="layer-list">
+
+      <div class="layer-item">
+        <div class="layer-badge b1">L1</div>
+        <div class="layer-body">
+          <div class="layer-name">主题层 &nbsp;<span style="font-size:11px;color:#bbb;font-weight:400">素材讲什么</span></div>
+          <div class="layer-desc">这是用户一眼看到的核心信息，决定了他会不会继续看</div>
+          <div class="layer-content">
+            <strong>核心卖点</strong>：秋冬面霜 &middot; 成分党测评 &middot; 神经酰胺修护<br>
+            <strong>用户需求</strong>：解决起皮卡粉、换季敏感、底妆不贴服<br>
+            <strong>内容定位</strong>：实测种草型（非硬广），以真实体验建立信任
+          </div>
+          <div class="tags"><span class="tag purple">护肤</span><span class="tag blue">抖音</span><span class="tag orange">种草</span><span class="tag pink">成分党</span></div>
+        </div>
+      </div>
+
+      <div class="layer-item">
+        <div class="layer-badge b2">L2</div>
+        <div class="layer-body">
+          <div class="layer-name">策略层 &nbsp;<span style="font-size:11px;color:#bbb;font-weight:400">用什么情绪/逻辑打动用户</span></div>
+          <div class="layer-desc">决定了素材的"打法"，是共鸣型、好奇型还是权威型？</div>
+          <div class="layer-content">
+            <strong>共鸣切入（0-3秒）</strong>：以"痛点经历"开头——"起皮、卡粉、底妆扒不住"，让用户觉得"这就是我"<br>
+            <strong>信任建立（3-15秒）</strong>：成分党视角背书——"3%神经酰胺+2%玻尿酸+角鲨烷"，用专业感打消疑虑<br>
+            <strong>时间线实证（15-45秒）</strong>：真实使用周期——"第一天/第七天/第三十天"，用时间线证明效果<br>
+            <strong>价值锚定（结尾）</strong>：性价比对比——"一天3块多 vs 大牌"，降低决策门槛
+          </div>
+          <div class="tags"><span class="tag red">共鸣型</span><span class="tag green">信任建立</span><span class="tag orange">价值锚定</span><span class="tag blue">实证型</span></div>
+        </div>
+      </div>
+
+      <div class="layer-item">
+        <div class="layer-badge b3">L3</div>
+        <div class="layer-body">
+          <div class="layer-name">结构层 &nbsp;<span style="font-size:11px;color:#bbb;font-weight:400">内容骨架 / 段落逻辑</span></div>
+          <div class="layer-desc">这是可以跨品类复用的"骨架"，决定了内容的节奏感</div>
+          <div class="layer-content">
+            <div class="skel-row"><div class="skel-block s1" style="width:15%">开头 15%</div><span class="skel-label">痛点共鸣 + 身份标签</span><span style="font-size:11px;color:#bbb;margin-left:8px">"家人们！这个面霜我用了整整一个月"</span></div>
+            <div class="skel-row"><div class="skel-block s2" style="width:60%">主体 60%</div><span class="skel-label">成分解析 + 时间线实证</span><span style="font-size:11px;color:#bbb;margin-left:8px">"3%神经酰胺...第一天/第七天/第三十天"</span></div>
+            <div class="skel-row"><div class="skel-block s3" style="width:25%">结尾 25%</div><span class="skel-label">性价比总结 + 互动引导</span><span style="font-size:11px;color:#bbb;margin-left:8px">"一天3块多...同款放评论区"</span></div>
+          </div>
+          <div class="tags" style="margin-top:12px"><span class="tag blue">&#128230; 骨架ID: S-003</span><span class="tag green">可复用</span><span class="tag orange">测评对比型</span></div>
+        </div>
+      </div>
+
+      <div class="layer-item">
+        <div class="layer-badge b4">L4</div>
+        <div class="layer-body">
+          <div class="layer-name">元素层 &nbsp;<span style="font-size:11px;color:#bbb;font-weight:400">可插拔的关键模块</span></div>
+          <div class="layer-desc">这些是"枝杈"，可以替换组合，影响素材的信息密度和转化力</div>
+          <div class="layer-content">
+            <strong>&#128230; 标题公式</strong>：【身份标签 + 时间背书 + 结果承诺】<br>
+            <span style="color:#999;margin-left:20px">&rarr; "用了一个月才敢推荐的面霜，真的绝了"</span><br><br>
+            <strong>&#128221; 钩子句式</strong>：【痛点描述 + 情感共鸣 + 悬念留白】<br>
+            <span style="color:#999;margin-left:20px">&rarr; "之前我的脸一到秋冬就起皮、卡粉，底妆根本扒不住..."</span><br><br>
+            <strong>&#128202; 数据呈现</strong>：【成分浓度 + 使用周期 + 效果量化】<br>
+            <span style="color:#999;margin-left:20px">&rarr; "3%神经酰胺+2%玻尿酸" / "第七天起皮明显减少"</span><br><br>
+            <strong>&#127912; 价格锚点</strong>：【日均成本 + 对比参照】<br>
+            <span style="color:#999;margin-left:20px">&rarr; "一瓶200多，能用两个月，平均一天3块多"</span><br><br>
+            <strong>&#128172; 互动引导</strong>：【提问式结尾 + 评论区引导】<br>
+            <span style="color:#999;margin-left:20px">&rarr; "同款面霜放评论区了，想入的姐妹冲！"</span>
+          </div>
+          <div class="tags"><span class="tag blue">标题公式</span><span class="tag green">钩子句式</span><span class="tag orange">数据呈现</span><span class="tag pink">价格锚点</span><span class="tag purple">互动引导</span></div>
+        </div>
+      </div>
+
+      <div class="layer-item">
+        <div class="layer-badge b5">L5</div>
+        <div class="layer-body">
+          <div class="layer-name">表达层 &nbsp;<span style="font-size:11px;color:#bbb;font-weight:400">具体的文字/视觉表达（叶子）</span></div>
+          <div class="layer-desc">这是"叶子"，具体内容填充，每次裂变都会替换这一层</div>
+          <div class="layer-content">
+            &#128221; <strong>金句/口播文案</strong>：<br>
+            <span style="color:#999;margin-left:20px">"家人们！这个面霜我真的用了整整一个月才来反馈的！"</span><br>
+            <span style="color:#999;margin-left:20px">"之前我的脸一到秋冬就起皮、卡粉，底妆根本扒不住。"</span><br>
+            <span style="color:#999;margin-left:20px">"抱着试试的心态用了一周，真的绝了——"</span><br>
+            <span style="color:#999;margin-left:20px">"成分党看过来：3%神经酰胺+2%玻尿酸+角鲨烷"</span><br><br>
+            &#128202; <strong>核心数据</strong>：<br>
+            <span style="color:#999;margin-left:20px">"第一天：上脸不油腻，吸收快"</span><br>
+            <span style="color:#999;margin-left:20px">"第七天：起皮明显减少，底妆服帖了"</span><br>
+            <span style="color:#999;margin-left:20px">"第三十天：皮肤状态稳定了很多，连毛孔都细腻了"</span><br><br>
+            &#127912; <strong>视觉/画面描述</strong>：<br>
+            <span style="color:#999;margin-left:20px">上手质地对比图 + 成分表特写 + 使用前后对比</span><br><br>
+            &#127916; <strong>BGM/音效建议</strong>：<br>
+            <span style="color:#999;margin-left:20px">轻快节奏BGM + 翻书音效（切换使用阶段）</span>
+          </div>
+          <div class="tags"><span class="tag red">金句</span><span class="tag blue">数据</span><span class="tag green">视觉</span><span class="tag orange">BGM</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- AI复盘洞察 -->
+    <div class="divider"></div>
+    <div class="insight-box">
+      <div class="insight-title">&#128161; AI复盘洞察 &mdash; 为什么这个素材能跑出来？</div>
+      <div style="font-size:13px;color:#555;line-height:2">
+        <div class="reason-row"><span class="reason-idx r1">1</span><strong>钩子强</strong>：以"家人们"开头 + 一个月时间背书，3秒完播率预计高于均值。"用了整整一个月"暗示真实体验，非广告感</div>
+        <div class="reason-row"><span class="reason-idx r2">2</span><strong>信任链完整</strong>：痛点共鸣（起皮）&rarr; 成分背书（神经酰胺）&rarr; 时间线实证（1/7/30天）&rarr; 性价比锚定（3块多/天），逻辑链闭环，降低决策门槛</div>
+        <div class="reason-row"><span class="reason-idx r3">3</span><strong>价格锚点精准</strong>："一天3块多"把抽象价格转化为可感知的日常成本，配合"比大牌平替划算"形成对比，消除价格顾虑</div>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed #d0d0ff">
+        <div style="font-size:12px;color:#667eea;font-weight:600;margin-bottom:6px">&#128161; 可复用要素提取</div>
+        <div style="font-size:12px;color:#555;line-height:1.8">
+          <span class="data-chip up" style="margin-right:6px;margin-bottom:4px;display:inline-block">钩子公式：时间背书 + 真实体验</span>
+          <span class="data-chip up" style="margin-right:6px;margin-bottom:4px;display:inline-block">信任链：痛点&rarr;成分&rarr;周期&rarr;价格</span>
+          <span class="data-chip up" style="margin-right:6px;margin-bottom:4px;display:inline-block">价格锚点：日均成本法</span>
+          <span class="data-chip up" style="margin-right:6px;margin-bottom:4px;display:inline-block">互动引导：评论区放置购买链接</span>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:#bbb">&#128161; 建议裂变方向：保留L2策略层 + L3结构层 + L4元素层，替换L5表达层到其他品类（防晒/精华/洁面）</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="showToast('已保存到骨架库')">&#128190; 保存骨架到骨架库</button>
+      <button class="btn btn-green" onclick="switchPage('pg-fission',document.querySelectorAll('.nav-tab')[2])">&#9889; 前往裂变 &rarr;</button>
+      <button class="btn btn-secondary" onclick="showToast('进入编辑模式')">&#9999; 手动调整</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- PAGE 2: material library with business data -->
+<div id="pg-library" class="page">
+  <div class="stats">
+    <div class="stat-card"><div class="stat-num purple">128</div><div class="stat-label">原始素材</div></div>
+    <div class="stat-card"><div class="stat-num green">46</div><div class="stat-label">已拆解</div></div>
+    <div class="stat-card"><div class="stat-num orange">215</div><div class="stat-label">裂变素材</div></div>
+    <div class="stat-card"><div class="stat-num blue">37</div><div class="stat-label">骨架模板</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#667eea"></span>素材库 <span style="font-size:12px;color:#bbb;font-weight:400">（关联投放数据）</span></div>
+    <div class="lib-grid">
+      <div class="lib-card selected" onclick="selectCard(this)">
+        <div class="lib-title">秋冬保湿面霜成分测评</div>
+        <div class="lib-excerpt">家人们！这个面霜我真的用了整整一个月才来反馈的！之前我的脸一到秋冬就起皮、卡粉...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag blue">抖音</span><span class="tag green">已拆解</span><span class="badge-hot">爆款</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#bbb">CTR 3.2% &middot; ROI 4.6x &middot; 消耗 &yen;58万</div>
+      </div>
+      <div class="lib-card" onclick="selectCard(this)">
+        <div class="lib-title">油皮夏日控油routine分享</div>
+        <div class="lib-excerpt">大油皮夏天真的太难了！出门两小时就油光满面，今天分享我的一整套控油routine...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag blue">抖音</span><span class="tag green">已拆解</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#bbb">CTR 2.1% &middot; ROI 2.8x &middot; 消耗 &yen;12万</div>
+      </div>
+      <div class="lib-card" onclick="selectCard(this)">
+        <div class="lib-title">新手化妆5个常见误区</div>
+        <div class="lib-excerpt">学化妆踩了这些坑，浪费了好多冤枉钱！今天总结5个新手最容易犯的误区...</div>
+        <div class="lib-meta"><span class="tag orange">彩妆</span><span class="tag blue">抖音</span><span class="tag gray">未拆解</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#bbb">暂无投放数据</div>
+      </div>
+      <div class="lib-card" onclick="selectCard(this)">
+        <div class="lib-title">抗老精华红黑榜2025版</div>
+        <div class="lib-excerpt">用了两年抗老精华，花了上万块，终于整理出这份红黑榜。先说结论：贵的真不一定好...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag red">公众号</span><span class="tag green">已拆解</span><span class="badge-cold">平庸</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#bbb">CTR 1.2% &middot; ROI 1.5x &middot; 消耗 &yen;8万</div>
+      </div>
+      <div class="lib-card" onclick="selectCard(this)">
+        <div class="lib-title">敏感肌修护屏障实战指南</div>
+        <div class="lib-excerpt">从烂脸到稳定，我的敏感肌修护之路。这篇不推荐产品，只讲修护屏障的核心逻辑...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag blue">抖音</span><span class="tag gray">未拆解</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#bbb">暂无投放数据</div>
+      </div>
+      <div class="lib-card" onclick="selectCard(this)">
+        <div class="lib-title">学生党平价防晒大测评</div>
+        <div class="lib-excerpt">预算有限也能做好防晒！测评了10款50元以内的防晒霜，从肤感、防晒力打分...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag orange">B站</span><span class="tag green">已拆解</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#bbb">CTR 2.8% &middot; ROI 3.9x &middot; 消耗 &yen;35万</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="showToast('已选中素材，正在拆解...')">&#128269; 拆解选中素材</button>
+      <button class="btn btn-secondary">&#128269; 搜索筛选</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== PAGE 3: 素材裂变 ==================== -->
+<div id="pg-fission" class="page">
+
+  <!-- 业务说明 -->
+  <div style="background:linear-gradient(135deg,#fff0f6,#ffe6f0);border:1px solid #ffcce0;border-radius:12px;padding:16px 24px;margin-bottom:20px;font-size:13px;color:#555;line-height:1.8">
+    <strong style="color:#c2185b">&#9889; 裂变说明</strong> &mdash; 裂变的核心逻辑：<strong>用效果好的素材骨架 + 新内容 = 新素材</strong>。
+    系统会优先推荐高ROI素材的骨架，帮助你把成功经验快速复制到新品类/新主题上。
+  </div>
+
+  <!-- Step 1: 选择母体 -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#f093fb"></span>Step 1 &mdash; 选择母体素材 <span style="font-size:11px;color:#bbb;font-weight:400">（优先选择效果好的素材）</span></div>
+    <div class="lib-grid">
+      <div class="lib-card selected" onclick="selectCard(this)">
+        <div class="lib-title">&#128293; 秋冬保湿面霜成分测评</div>
+        <div class="lib-excerpt">家人们！这个面霜我真的用了整整一个月才来反馈的！...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag blue">抖音</span><span class="tag green">已拆解</span><span class="badge-hot">爆款</span></div>
+        <div style="margin-top:8px;font-size:11px"><span class="data-chip up">CTR 3.2%</span> <span class="data-chip up">ROI 4.6x</span> <span class="data-chip neutral">&#165;58万</span></div>
+      </div>
+      <div class="lib-card" onclick="selectCard(this)">
+        <div class="lib-title">学生党平价防晒大测评</div>
+        <div class="lib-excerpt">预算有限也能做好防晒！测评了10款50元以内的防晒霜...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag orange">B站</span><span class="tag green">已拆解</span></div>
+        <div style="margin-top:8px;font-size:11px"><span class="data-chip up">CTR 2.8%</span> <span class="data-chip up">ROI 3.9x</span> <span class="data-chip neutral">&#165;35万</span></div>
+      </div>
+      <div class="lib-card" onclick="selectCard(this)">
+        <div class="lib-title">&#128293; 抗老精华红黑榜2025版</div>
+        <div class="lib-excerpt">用了两年抗老精华，花了上万块，终于整理出这份红黑榜...</div>
+        <div class="lib-meta"><span class="tag purple">护肤</span><span class="tag red">公众号</span><span class="tag green">已拆解</span><span class="badge-cold">平庸</span></div>
+        <div style="margin-top:8px;font-size:11px"><span class="data-chip down">CTR 1.2%</span> <span class="data-chip down">ROI 1.5x</span> <span class="data-chip neutral">&#165;8万</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: 裂变模式 -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#f5576c"></span>Step 2 &mdash; 选择裂变模式</div>
+    <div class="mode-grid">
+      <div class="mode-card selected" onclick="selectMode(this)">
+        <div class="mode-icon">&#127793;</div>
+        <div class="mode-name">同构异内容（换叶子）</div>
+        <div class="mode-desc">骨架不变，替换主题/品类<br>例：面霜测评 &rarr; 防晒霜测评</div>
+        <div style="margin-top:8px"><span class="data-chip up">推荐：效果最好</span></div>
+      </div>
+      <div class="mode-card" onclick="selectMode(this)">
+        <div class="mode-icon">&#128161;</div>
+        <div class="mode-name">同内容异结构（换枝杈）</div>
+        <div class="mode-desc">主题不变，调整段落结构<br>例：痛点开头 &rarr; 悬念开头</div>
+      </div>
+      <div class="mode-card" onclick="selectMode(this)">
+        <div class="mode-icon">&#127912;</div>
+        <div class="mode-name">跨风格移植（换表达）</div>
+        <div class="mode-desc">骨架不变，替换风格调性<br>例：成分党 &rarr; 闺蜜聊天风</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: 替换内容 + 骨架预览 -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#4facfe"></span>Step 3 &mdash; 指定替换内容</div>
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">新主题 / 品类</label><input class="form-input" type="text" placeholder="例：夏日清爽防晒霜"></div>
+      <div class="form-group"><label class="form-label">目标平台</label><input class="form-input" type="text" placeholder="例：抖音 / 小红书"></div>
+      <div class="form-group"><label class="form-label">目标风格</label><input class="form-input" type="text" placeholder="例：成分党 / 闺蜜风"></div>
+      <div class="form-group"><label class="form-label">裂变数量</label><input class="form-input" type="text" placeholder="例：6"></div>
+      <div class="form-group full"><label class="form-label">补充说明（可选）</label><textarea class="form-input form-textarea" placeholder="描述你想在裂变中体现的特定要求..."></textarea></div>
+    </div>
+    <div class="divider"></div>
+    <div class="card-title"><span class="dot" style="background:#667eea"></span>骨架预览 &mdash; 继承自母体</div>
+    <div class="flow-summary">
+      <span class="flow-from">面霜测评爆款骨架</span>
+      <span class="flow-arrow">&#8594;</span>
+      <span style="color:#666">保留：</span>
+      <span class="data-chip up">L2 策略层</span>
+      <span class="data-chip up">L3 结构层</span>
+      <span class="data-chip up">L4 元素层</span>
+      <span class="flow-arrow">&#8594;</span>
+      <span class="flow-to">替换 L5 表达层</span>
+    </div>
+    <div class="skel-structure">
+      <div class="skel-part"><div class="skel-bar a" style="width:15%">开头 15%</div><span class="skel-part-label">痛点共鸣 + 身份标签</span></div>
+      <div class="skel-part"><div class="skel-bar b" style="width:60%">主体 60%</div><span class="skel-part-label">成分解析 + 时间线实证</span></div>
+      <div class="skel-part"><div class="skel-bar c" style="width:25%">结尾 25%</div><span class="skel-part-label">性价比总结 + 互动引导</span></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="runFission()">&#9889; 开始裂变</button>
+      <button class="btn btn-secondary" onclick="showToast('已加入批量队列')">&#128203; 加入批量队列</button>
+    </div>
+  </div>
+
+  <!-- 裂变结果 -->
+  <div class="card" id="fissionResult" style="display:none">
+    <div class="card-title"><span class="dot" style="background:#43e97b"></span>裂变结果 <span style="font-size:11px;color:#bbb;font-weight:400">（基于母体ROI 4.6x 预测）</span></div>
+    <div class="result-grid">
+
+      <div class="result-card">
+        <div class="result-head"><span class="result-id">F-001</span><span class="result-badge ready">可直接用</span></div>
+        <div style="font-size:12px;color:#667eea;font-weight:600;margin-bottom:8px">【夏日防晒霜成分测评】</div>
+        <div class="result-text">家人们！这个防晒霜我真的用了整整一个月才来反馈的！<br><br>之前我一到夏天就晒黑、出油，底妆根本扒不住。朋友推荐了这个含物理+化学双重防晒剂的防晒霜，抱着试试的心态用了一周，真的绝了——<br><br>第一天：上脸不假白，成膜快，不搓泥<br>第七天：出油明显减少，防晒力稳定不衰减<br>第三十天：皮肤没晒黑，连毛孔都细腻了<br><br>成分党看过来：二氧化钛+甲氧基肉桂酸乙基己酯，SPF50+ PA++++。不含酒精香精，敏感肌也能用。<br><br>一瓶180多，能用两个月，平均一天3块多，比那些大牌防晒划算多了！<br><br>同款防晒霜放评论区了，想入的姐妹冲！</div>
+        <div class="result-effect">&#128202; 预测CTR: 2.8%-3.5% &middot; 预测ROI: 3.5x-4.8x &middot; 适用：抖音信息流</div>
+      </div>
+
+      <div class="result-card">
+        <div class="result-head"><span class="result-id">F-002</span><span class="result-badge ready">可直接用</span></div>
+        <div style="font-size:12px;color:#667eea;font-weight:600;margin-bottom:8px">【夏日防晒霜红黑榜】</div>
+        <div class="result-text">用了两年防晒，花了大几千，终于整理出这份红黑榜！先说结论：贵的真不一定适合你，关键看成分和肤感匹配度。<br><br>&#127912; <strong>红榜推荐：</strong><br>第一名：XX防晒乳（物理+化学双效，SPF50+，不假白）<br>第二名：YY防晒喷雾（补喷方便，成膜快）<br>第三名：ZZ平价防晒（不到50块，学生党冲）<br><br>&#128221; 金句：【防晒不做好，抗老全白搭】<br><br>&#128221; <strong>黑榜避雷：</strong><br>第一名：某大牌防晒（贵且搓泥，用了闷痘）<br>第二名：某网红防晒（防晒力不够，户外2小时就晒黑）<br><br>你们用过哪款？评论区告诉我～</div>
+        <div class="result-effect">&#128202; 预测CTR: 2.5%-3.2% &middot; 预测ROI: 3.2x-4.2x &middot; 适用：抖音/小红书</div>
+      </div>
+
+      <div class="result-card">
+        <div class="result-head"><span class="result-id">F-003</span><span class="result-badge draft">需微调</span></div>
+        <div style="font-size:12px;color:#667eea;font-weight:600;margin-bottom:8px">【油皮夏日防晒routine】</div>
+        <div class="result-text">大油皮夏天防晒真的太难了！涂多了闷痘，涂少了晒黑。今天分享我的夏日防晒完整routine，从选品到手法，亲测不闷痘。<br><br>第一步：洁面后先用控油水乳打底<br>第二步：等水乳完全干透再涂防晒（关键！）<br>第三步：防晒用量要足，一元硬币大小<br>第四步：出门前20分钟涂，每2小时补喷<br><br>我的搭配：XX控油水乳 + XX防晒乳 + XX定妆喷雾<br>一整天下来不闷痘、不晒黑、底妆还服帖！<br><br>&#127912; 视觉建议：上手质地对比图 + routine步骤演示</div>
+        <div class="result-effect">&#128202; 预测CTR: 2.0%-2.8% &middot; 预测ROI: 2.5x-3.5x &middot; 适用：抖音教程类</div>
+      </div>
+
+      <div class="result-card">
+        <div class="result-head"><span class="result-id">F-004</span><span class="result-badge predicted">效果待验证</span></div>
+        <div style="font-size:12px;color:#667eea;font-weight:600;margin-bottom:8px">【学生党平价防晒大测评】</div>
+        <div class="result-text">预算有限也能做好防晒！测评了10款50元以内的防晒霜，从肤感、防晒力、成膜速度三个维度打分。<br><br>第一名：XX防晒乳（49元）<br>肤感：&#9733;&#9733;&#9733;&#9733;&#9734; 防晒力：&#9733;&#9733;&#9733;&#9733;&#9733;<br>成膜：&#9733;&#9733;&#9733;&#9733;&#9734;<br>一句话：性价比之王，闭眼入！<br><br>第二名：YY防晒喷雾（39元）<br>肤感：&#9733;&#9733;&#9733;&#9733;&#9733; 防晒力：&#9733;&#9733;&#9733;&#9734;&#9734;<br>成膜：&#9733;&#9733;&#9733;&#9733;&#9733;<br>一句话：肤感无敌，防晒力一般，适合日常通勤<br><br>避雷：ZZ网红防晒（29元）<br>假白严重，搓泥，用了闷痘，千万别买！<br><br>&#128202; 完整测评表格放评论区了</div>
+        <div class="result-effect">&#128202; 预测CTR: 2.2%-3.0% &middot; 预测ROI: 2.8x-3.8x &middot; 适用：B站/小红书</div>
+      </div>
+
+      <div class="result-card" style="border-top:3px solid #667eea">
+        <div class="result-head"><span class="result-id">F-005</span><span class="result-badge ready">可直接用</span></div>
+        <div style="font-size:12px;color:#667eea;font-weight:600;margin-bottom:8px">【换季修护精华成分测评】</div>
+        <div class="result-text">家人们！这个修护精华我真的用了整整一个月才来反馈的！<br><br>之前我的脸一换季就泛红、刺痛，用什么护肤品都不舒服。朋友推荐了这个含积雪草+B5的修护精华，抱着试试的心态用了一周，真的绝了——<br><br>第一天：上脸不刺激，吸收快，有舒缓感<br>第七天：泛红明显减少，皮肤没那么敏感了<br>第三十天：皮肤屏障稳定了很多，换季不过敏了<br><br>成分党看过来：5%积雪草苷+2%泛醇+神经酰胺NP，都是修护屏障的核心成分。不含酒精香精防腐剂，敏感肌也能用。<br><br>一瓶160多，能用两个月，平均一天2块多，比那些大牌修护精华划算多了！<br><br>同款精华放评论区了，敏感肌姐妹冲！</div>
+        <div class="result-effect">&#128202; 预测CTR: 2.6%-3.3% &middot; 预测ROI: 3.2x-4.5x &middot; 适用：抖音信息流</div>
+      </div>
+
+      <div class="result-card" style="border-top:3px solid #c2185b">
+        <div class="result-head"><span class="result-id">F-006</span><span class="result-badge predicted">效果待验证</span></div>
+        <div style="font-size:12px;color:#667eea;font-weight:600;margin-bottom:8px">【男生护肤洁面测评】</div>
+        <div class="result-text">兄弟们！这个洁面我真的用了整整一个月才来反馈的！<br><br>之前我脸上出油严重，黑头粉刺一大堆，用了好多洁面都紧绷得要命。朋友推荐了这个氨基酸+水杨酸的洁面，抱着试试的心态用了一周，真的绝了——<br><br>第一天：上脸不紧绷，洗完很舒服<br>第七天：出油明显减少，黑头开始变少<br>第三十天：皮肤状态稳定了，毛孔都细腻了<br><br>成分党看过来：氨基酸表活+1%水杨酸+烟酰胺，清洁力够但不伤肤。不含皂基，男生也能放心用。<br><br>一瓶80多，能用三个月，平均一天不到1块，比那些男士洁面划算多了！<br><br>同款洁面放评论区了，兄弟们冲！</div>
+        <div class="result-effect">&#128202; 预测CTR: 1.8%-2.5% &middot; 预测ROI: 2.2x-3.2x &middot; 适用：抖音男性用户群体</div>
+      </div>
+
+    </div>
+
+    <!-- 裂变总结 -->
+    <div style="margin-top:16px;padding:16px;background:#f8f9fa;border-radius:10px">
+      <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:8px">&#128202; 裂变总结</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:12px">
+        <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:#27ae60">6</div><div style="color:#999">生成素材数</div></div>
+        <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:#667eea">3.1x</div><div style="color:#999">平均预测ROI</div></div>
+        <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:#e67e22">4/6</div><div style="color:#999">可直接用</div></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="showToast('已导出到素材库')">&#128228; 全部导出到素材库</button>
+      <button class="btn btn-secondary" onclick="showToast('进入编辑模式')">&#9999; 批量编辑</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 4: Skeleton Library with effect data -->
+<div id="pg-skeleton" class="page">
+  <div class="stats">
+    <div class="stat-card"><div class="stat-num blue">37</div><div class="stat-label">骨架模板</div></div>
+    <div class="stat-card"><div class="stat-num purple">8</div><div class="stat-label">高复用骨架</div></div>
+    <div class="stat-card"><div class="stat-num green">156</div><div class="stat-label">累计使用次数</div></div>
+    <div class="stat-card"><div class="stat-num orange">3.2x</div><div class="stat-label">平均裂变倍数</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#667eea"></span>骨架模板库 <span style="font-size:11px;color:#bbb;font-weight:400">（按效果排序）</span></div>
+    <div class="skel-lib-grid">
+      <div class="skel-card">
+        <div class="skel-card-title">&#128230; 测评对比型骨架 <span class="badge-hot">效果最佳</span></div>
+        <div class="skel-src">来源：秋冬保湿面霜成分测评 | 使用 23 次 | 平均ROI 3.8x</div>
+        <div class="skel-structure">
+          <div class="skel-part"><div class="skel-bar a" style="width:15%">开头</div><span class="skel-part-label">痛点共鸣</span></div>
+          <div class="skel-part"><div class="skel-bar b" style="width:60%">主体</div><span class="skel-part-label">逐项测评</span></div>
+          <div class="skel-part"><div class="skel-bar c" style="width:25%">结尾</div><span class="skel-part-label">总结推荐</span></div>
+        </div>
+        <div class="skel-usage">&#127793; 适用：产品对比 / 红黑榜 / 横向评测</div>
+        <div style="margin-top:8px;font-size:11px"><span class="data-chip up">爆款率 35%</span> <span class="data-chip up">平均CTR 2.9%</span></div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn btn-primary" style="padding:6px 16px;font-size:12px" onclick="switchPage('pg-fission',document.querySelectorAll('.nav-tab')[2])">&#9889; 用这个骨架裂变</button>
+          <button class="btn btn-secondary" style="padding:6px 16px;font-size:12px">&#9999; 编辑</button>
+        </div>
+      </div>
+      <div class="skel-card">
+        <div class="skel-card-title">&#128221; 红黑榜型骨架</div>
+        <div class="skel-src">来源：抗老精华红黑榜2025版 | 使用 18 次 | 平均ROI 2.1x</div>
+        <div class="skel-structure">
+          <div class="skel-part"><div class="skel-bar a" style="width:10%">开头</div><span class="skel-part-label">结论前置</span></div>
+          <div class="skel-part"><div class="skel-bar b" style="width:50%">红榜</div><span class="skel-part-label">推荐列表</span></div>
+          <div class="skel-part"><div class="skel-bar a" style="width:25%">黑榜</div><span class="skel-part-label">避雷列表</span></div>
+          <div class="skel-part"><div class="skel-bar c" style="width:15%">结尾</div><span class="skel-part-label">选购建议</span></div>
+        </div>
+        <div class="skel-usage">&#127793; 适用：产品推荐 / 避雷指南 / 选购攻略</div>
+        <div style="margin-top:8px;font-size:11px"><span class="data-chip up">爆款率 22%</span> <span class="data-chip neutral">平均CTR 1.8%</span></div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn btn-primary" style="padding:6px 16px;font-size:12px" onclick="switchPage('pg-fission',document.querySelectorAll('.nav-tab')[2])">&#9889; 用这个骨架裂变</button>
+          <button class="btn btn-secondary" style="padding:6px 16px;font-size:12px">&#9999; 编辑</button>
+        </div>
+      </div>
+      <div class="skel-card">
+        <div class="skel-card-title">&#128161; 误区纠正型骨架</div>
+        <div class="skel-src">来源：新手化妆5个常见误区 | 使用 12 次 | 平均ROI 2.5x</div>
+        <div class="skel-structure">
+          <div class="skel-part"><div class="skel-bar a" style="width:20%">开头</div><span class="skel-part-label">引发共鸣</span></div>
+          <div class="skel-part"><div class="skel-bar b" style="width:55%">主体</div><span class="skel-part-label">误区列表</span></div>
+          <div class="skel-part"><div class="skel-bar c" style="width:25%">结尾</div><span class="skel-part-label">正确做法</span></div>
+        </div>
+        <div class="skel-usage">&#127793; 适用：知识科普 / 误区辟谣 / 干货分享</div>
+        <div style="margin-top:8px;font-size:11px"><span class="data-chip up">爆款率 28%</span> <span class="data-chip up">平均CTR 2.4%</span></div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn btn-primary" style="padding:6px 16px;font-size:12px" onclick="switchPage('pg-fission',document.querySelectorAll('.nav-tab')[2])">&#9889; 用这个骨架裂变</button>
+          <button class="btn btn-secondary" style="padding:6px 16px;font-size:12px">&#9999; 编辑</button>
+        </div>
+      </div>
+      <div class="skel-card">
+        <div class="skel-card-title">&#127793; Routine分享型骨架</div>
+        <div class="skel-src">来源：油皮夏日控油routine | 使用 9 次 | 平均ROI 1.9x</div>
+        <div class="skel-structure">
+          <div class="skel-part"><div class="skel-bar a" style="width:15%">开头</div><span class="skel-part-label">肤质介绍</span></div>
+          <div class="skel-part"><div class="skel-bar b" style="width:60%">步骤</div><span class="skel-part-label">分步讲解</span></div>
+          <div class="skel-part"><div class="skel-bar c" style="width:25%">结尾</div><span class="skel-part-label">效果总结</span></div>
+        </div>
+        <div class="skel-usage">&#127793; 适用：教程 / 流程分享 / 产品合集</div>
+        <div style="margin-top:8px;font-size:11px"><span class="data-chip neutral">爆款率 15%</span> <span class="data-chip neutral">平均CTR 1.5%</span></div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn btn-primary" style="padding:6px 16px;font-size:12px" onclick="switchPage('pg-fission',document.querySelectorAll('.nav-tab')[2])">&#9889; 用这个骨架裂变</button>
+          <button class="btn btn-secondary" style="padding:6px 16px;font-size:12px">&#9999; 编辑</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#43e97b"></span>骨架使用数据</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px">
+      <div style="background:#f8f9fa;border-radius:10px;padding:20px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:#667eea;margin-bottom:4px">测评对比型</div>
+        <div style="font-size:13px;color:#999;margin-bottom:8px">最受欢迎骨架</div>
+        <div style="font-size:12px;color:#bbb">被使用 23 次 &middot; 裂变出 69 条素材 &middot; 平均ROI 3.8x</div>
+      </div>
+      <div style="background:#f8f9fa;border-radius:10px;padding:20px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:#27ae60;margin-bottom:4px">红黑榜型</div>
+        <div style="font-size:13px;color:#999;margin-bottom:8px">裂变倍数最高</div>
+        <div style="font-size:12px;color:#bbb">被使用 18 次 &middot; 裂变出 54 条素材 &middot; 平均ROI 2.1x</div>
+      </div>
+      <div style="background:#f8f9fa;border-radius:10px;padding:20px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:#e67e22;margin-bottom:4px">误区纠正型</div>
+        <div style="font-size:13px;color:#999;margin-bottom:8px">互动率最高</div>
+        <div style="font-size:12px;color:#bbb">被使用 12 次 &middot; 裂变出 36 条素材 &middot; 平均ROI 2.5x</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
