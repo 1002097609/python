@@ -16,6 +16,16 @@
         >
           {{ tab.icon }} {{ tab.label }}
         </router-link>
+        <el-dropdown trigger="click" class="nav-dropdown">
+          <span class="nav-tab">更多 ▾</span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item>
+                <router-link to="/option-manage" class="dropdown-link">⚙️ 选项管理</router-link>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -91,6 +101,9 @@ body {
   color: #fff;
   background: rgba(255,255,255,.1);
 }
+
+.nav-dropdown { margin-left: 4px; }
+.dropdown-link { text-decoration: none; color: #333; display: block; }
 
 .content { min-height: calc(100vh - 60px); }
 </style>
