@@ -256,6 +256,21 @@ const createMaterial = async () => {
   loading.value = false
 }
 
+const buildDismantlePayload = () => ({
+  material_id: dismantleForm.material_id,
+  l1_topic: dismantleForm.l1_topic || null,
+  l1_core_point: dismantleForm.l1_core_point || null,
+  l2_strategy: dismantleForm.l2_strategy || [],
+  l2_emotion: dismantleForm.l2_emotion || null,
+  l3_structure: (dismantleForm.l3_structure || []).map(s => ({
+    name: s.name || '',
+    function: s.function || '',
+    ratio: Number(s.ratio) || 0,
+  })),
+  l4_elements: dismantleForm.l4_elements || {},
+  l5_expressions: dismantleForm.l5_expressions || {},
+})
+
 const submitDismantle = async () => {
   if (!dismantleForm.material_id) {
     ElMessage.warning('请先录入素材')
@@ -263,7 +278,7 @@ const submitDismantle = async () => {
   }
   loading.value = true
   try {
-    await api.post('/dismantle/', dismantleForm)
+    await api.post('/dismantle/', buildDismantlePayload())
     ElMessage.success('拆解结果保存成功')
   } catch (e) {
     ElMessage.error('保存失败: ' + (e.response?.data?.detail || e.message))
@@ -278,7 +293,7 @@ const submitDismantleAndExtract = async () => {
   }
   loading.value = true
   try {
-    const { data } = await api.post('/dismantle/', dismantleForm)
+    const { data } = await api.post('/dismantle/', buildDismantlePayload())
     // 自动提取骨架
     if (data.id) {
       await api.post(`/skeleton/from-dismantle/${data.id}`)
