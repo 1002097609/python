@@ -22,6 +22,7 @@ from .fission import router as fission_router
 from .effect import router as effect_router
 from .options import router as options_router
 from .option import router as option_router
+from .tag import router as tag_router
 
 # 创建统一的 API 路由器，所有子路由统一使用 /api 前缀
 api_router = APIRouter(prefix="/api")
@@ -46,3 +47,6 @@ api_router.include_router(options_router, prefix="/options", tags=["选项数据
 
 # 注册选项数据路由（新版）：提供更完整的 CRUD 操作
 api_router.include_router(option_router, prefix="/option", tags=["选项数据"])
+
+# 注册标签管理路由：标签 CRUD + 素材标签关联
+api_router.include_router(tag_router, prefix="/tag", tags=["标签管理"])

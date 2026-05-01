@@ -71,4 +71,31 @@ export async function getFissionDetail(fissionId) {
   return data
 }
 
+// ============================================================
+// 标签
+// ============================================================
+
+// 获取所有标签列表
+export async function getTags() {
+  const { data } = await api.get('/tag/')
+  return data
+}
+
+// 获取指定素材的标签列表
+export async function getMaterialTags(materialId) {
+  const { data } = await api.get(`/tag/material/${materialId}`)
+  return data
+}
+
+// 为素材添加标签
+export async function addMaterialTag(materialId, tagId) {
+  const { data } = await api.post(`/tag/material/${materialId}/tags`, { tag_id: tagId })
+  return data
+}
+
+// 移除素材的标签
+export async function removeMaterialTag(materialId, tagId) {
+  await api.delete(`/tag/material/${materialId}/tags/${tagId}`)
+}
+
 export default api

@@ -21,6 +21,9 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item>
+                <router-link to="/tag-manage" class="dropdown-link">🏷️ 标签管理</router-link>
+              </el-dropdown-item>
+              <el-dropdown-item>
                 <router-link to="/fission-records" class="dropdown-link">📋 裂变记录</router-link>
               </el-dropdown-item>
               <el-dropdown-item>

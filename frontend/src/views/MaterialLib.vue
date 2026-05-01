@@ -40,6 +40,9 @@
           <el-select v-model="filterPlatform" placeholder="平台" clearable style="width:120px">
             <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
           </el-select>
+          <el-select v-model="filterTagId" placeholder="按标签筛选" clearable style="width:140px">
+            <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
           <el-input v-model="searchKeyword" placeholder="搜索标题..." style="width:200px" clearable />
         </div>
       </div>
@@ -57,6 +60,12 @@
           <template #default="{ row }">
             <el-tag size="small" type="success" v-if="row.category">{{ row.category }}</el-tag>
             <span v-else class="text-muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="标签" min-width="140">
+          <template #default="{ row }">
+            <el-tag v-for="t in materialTagsMap[row.id]" :key="t.id" size="small" type="warning" effect="plain" style="margin:0 3px 3px 0">{{ t.name }}</el-tag>
+            <span v-if="!materialTagsMap[row.id] || !materialTagsMap[row.id].length" class="text-muted">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -112,6 +121,21 @@
           <span class="detail-value">{{ formatDate(currentMaterial.created_at) }}</span>
         </div>
         <div class="detail-row detail-block">
+          <span class="detail-label">标签</span>
+          <div class="detail-tags">
+            <el-tag
+              v-for="t in currentMaterialTags" :key="t.id"
+              closable size="small" type="warning" effect="plain"
+              @close="removeTag(currentMaterial.id, t.id)"
+              style="margin:0 4px 4px 0"
+            >{{ t.name }}</el-tag>
+            <span v-if="!currentMaterialTags.length" class="text-muted">暂无标签</span>
+            <el-select v-model="selectedTagForAdd" placeholder="添加标签" size="small" style="width:130px" @change="() => { if(selectedTagForAdd){ addTag(currentMaterial.id, selectedTagForAdd); selectedTagForAdd = null } }">
+              <el-option v-for="t in allTags.filter(t2 => !currentMaterialTags.some(ct => ct.id === t2.id))" :key="t.id" :label="t.name" :value="t.id" />
+            </el-select>
+          </div>
+        </div>
+        <div class="detail-row detail-block">
           <span class="detail-label">素材内容</span>
           <pre class="detail-content">{{ currentMaterial.content || '（空）' }}</pre>
         </div>
@@ -128,7 +152,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getOptions } from '../api'
+import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMaterialTag } from '../api'
 
 const router = useRouter()
 
@@ -136,8 +160,13 @@ const materials = ref([])
 const searchKeyword = ref('')
 const filterPlatform = ref('')
 const filterStatus = ref('')
+const filterTagId = ref(null)
+const allTags = ref([])
+const materialTagsMap = ref({})   // materialId -> [tag, ...]
 const detailVisible = ref(false)
 const currentMaterial = ref(null)
+const currentMaterialTags = ref([])
+const selectedTagForAdd = ref(null)
 
 const options = ref({
   material_status: [],
@@ -161,6 +190,7 @@ const filteredMaterials = computed(() => {
   let list = materials.value
   if (filterStatus.value !== '') list = list.filter(m => m.status === filterStatus.value)
   if (filterPlatform.value) list = list.filter(m => m.platform === filterPlatform.value)
+  if (filterTagId.value != null) list = list.filter(m => (materialTagsMap.value[m.id] || []).some(t => t.id === filterTagId.value))
   if (searchKeyword.value) {
     const kw = searchKeyword.value.toLowerCase()
     list = list.filter(m => m.title.toLowerCase().includes(kw))
@@ -188,14 +218,21 @@ const fetchMaterials = async () => {
   try {
     const { data } = await api.get('/material/')
     materials.value = data
+    // load tags for each material
+    for (const m of data) {
+      fetchMaterialTagsList(m.id)
+    }
   } catch (e) {
     ElMessage.error('加载失败')
   }
 }
 
-const viewDetail = (row) => {
+const viewDetail = async (row) => {
   currentMaterial.value = row
   detailVisible.value = true
+  const tags = await getMaterialTags(row.id)
+  currentMaterialTags.value = tags
+  materialTagsMap.value[row.id] = tags
 }
 
 const goDismantle = (row) => {
@@ -223,9 +260,55 @@ const handleDelete = (row) => {
   }).catch(() => {})
 }
 
+// ---- Tags ----
+const fetchTags = async () => {
+  try {
+    allTags.value = await getTags()
+  } catch (e) {
+    console.error('加载标签失败', e)
+  }
+}
+
+const fetchMaterialTagsList = async (materialId) => {
+  try {
+    const tags = await getMaterialTags(materialId)
+    materialTagsMap.value[materialId] = tags
+  } catch (e) {
+    console.error('加载素材标签失败', e)
+  }
+}
+
+const addTag = async (materialId, tagId) => {
+  try {
+    await addMaterialTag(materialId, tagId)
+    await fetchMaterialTagsList(materialId)
+    // sync currentMaterialTags if detail dialog is open for this material
+    if (currentMaterial.value && currentMaterial.value.id === materialId) {
+      currentMaterialTags.value = materialTagsMap.value[materialId] || []
+    }
+    ElMessage.success('标签已添加')
+  } catch (e) {
+    ElMessage.error('添加标签失败')
+  }
+}
+
+const removeTag = async (materialId, tagId) => {
+  try {
+    await removeMaterialTag(materialId, tagId)
+    await fetchMaterialTagsList(materialId)
+    if (currentMaterial.value && currentMaterial.value.id === materialId) {
+      currentMaterialTags.value = materialTagsMap.value[materialId] || []
+    }
+    ElMessage.success('标签已移除')
+  } catch (e) {
+    ElMessage.error('移除标签失败')
+  }
+}
+
 onMounted(() => {
   fetchMaterials()
   fetchOptions()
+  fetchTags()
 })
 </script>
 
@@ -264,6 +347,7 @@ onMounted(() => {
 .detail-row.detail-block { flex-direction: column; align-items: flex-start; gap: 6px; }
 .detail-label { font-size: 13px; color: #999; min-width: 60px; flex-shrink: 0; }
 .detail-value { font-size: 14px; color: #333; }
+.detail-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
 .detail-content {
   font-size: 13px; color: #555; line-height: 1.8; white-space: pre-wrap;
   background: #f8f9fa; padding: 14px; border-radius: 8px; width: 100%;
