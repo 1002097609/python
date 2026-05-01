@@ -39,13 +39,31 @@ DEFAULT_OPTIONS = [
     {"group_key": "platform", "label": "快手", "value": "快手", "sort_order": 3},
 
     # ----------------------------------------------------------
-    # 品类 (category) — 素材所属商品品类
+    # 品类 (category) — 素材所属商品/服务品类
+    # 覆盖消费品、耐用品、虚拟服务等多个行业
     # ----------------------------------------------------------
     {"group_key": "category", "label": "护肤", "value": "护肤", "sort_order": 1},
     {"group_key": "category", "label": "彩妆", "value": "彩妆", "sort_order": 2},
     {"group_key": "category", "label": "零食", "value": "零食", "sort_order": 3},
     {"group_key": "category", "label": "母婴", "value": "母婴", "sort_order": 4},
     {"group_key": "category", "label": "户外", "value": "户外", "sort_order": 5},
+    {"group_key": "category", "label": "数码", "value": "数码", "sort_order": 6},
+    {"group_key": "category", "label": "家居", "value": "家居", "sort_order": 7},
+    {"group_key": "category", "label": "服饰", "value": "服饰", "sort_order": 8},
+    {"group_key": "category", "label": "宠物", "value": "宠物", "sort_order": 9},
+    {"group_key": "category", "label": "健身", "value": "健身", "sort_order": 10},
+    {"group_key": "category", "label": "食品饮料", "value": "食品饮料", "sort_order": 11},
+    {"group_key": "category", "label": "家电", "value": "家电", "sort_order": 12},
+    {"group_key": "category", "label": "汽车", "value": "汽车", "sort_order": 13},
+    {"group_key": "category", "label": "教育培训", "value": "教育培训", "sort_order": 14},
+    {"group_key": "category", "label": "金融理财", "value": "金融理财", "sort_order": 15},
+    {"group_key": "category", "label": "医疗健康", "value": "医疗健康", "sort_order": 16},
+    {"group_key": "category", "label": "旅游出行", "value": "旅游出行", "sort_order": 17},
+    {"group_key": "category", "label": "房产", "value": "房产", "sort_order": 18},
+    {"group_key": "category", "label": "游戏", "value": "游戏", "sort_order": 19},
+    {"group_key": "category", "label": "文化娱乐", "value": "文化娱乐", "sort_order": 20},
+    {"group_key": "category", "label": "企业服务", "value": "企业服务", "sort_order": 21},
+    {"group_key": "category", "label": "农业", "value": "农业", "sort_order": 22},
 
     # ----------------------------------------------------------
     # 风格 (style) — 素材内容风格类型
@@ -111,7 +129,7 @@ DEFAULT_OPTIONS = [
 
     # ----------------------------------------------------------
     # 金句预设 (golden_sentence) — 各行业常用营销金句
-    # 覆盖护肤、母婴、零食、户外等品类
+    # 覆盖22个品类：护肤/彩妆/零食/母婴/户外/数码/家居/服饰/宠物/健身/食品饮料/家电/汽车/教育培训/金融理财/医疗健康/旅游出行/房产/游戏/文化娱乐/企业服务/农业
     # ----------------------------------------------------------
     {"group_key": "golden_sentence", "label": "这个细节99%的人都忽略了", "value": "这个细节99%的人都忽略了", "sort_order": 1},
     {"group_key": "golden_sentence", "label": "用了3年才发现这个方法", "value": "用了3年才发现这个方法", "sort_order": 2},

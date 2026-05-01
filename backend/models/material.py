@@ -48,8 +48,8 @@ class Material(Base):
     # 投放平台：如"抖音"、"小红书"、"快手"等
     platform = Column(String(50), comment="平台：抖音/小红书/快手")
 
-    # 业务品类：如"护肤"、"彩妆"、"零食"、"母婴"等
-    category = Column(String(50), comment="品类：护肤/彩妆/零食/母婴")
+    # 业务品类，如"护肤"、"彩妆"、"零食"等，从数据库 option 表 category 分组动态加载
+    category = Column(String(50), comment="业务品类，动态从 option 表加载")
 
     # 素材类型：video（视频）/ image（图文）/ text（纯文字）
     media_type = Column(String(20), comment="类型：video/image/text")
