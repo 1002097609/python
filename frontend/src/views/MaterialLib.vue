@@ -244,6 +244,8 @@ const fetchMaterials = async () => {
     const params = { page: page.value, page_size: pageSize.value }
     if (filterPlatform.value) params.platform = filterPlatform.value
     if (filterStatus.value !== '') params.status = filterStatus.value
+    if (filterTagId.value != null) params.tag_id = filterTagId.value
+    if (searchKeyword.value) params.keyword = searchKeyword.value
     const { data } = await api.get('/material/', { params })
     if (Array.isArray(data)) {
       materials.value = data
@@ -263,8 +265,9 @@ const fetchMaterials = async () => {
 }
 
 // 筛选变化时重新加载
-watch([filterPlatform, filterStatus], () => {
+watch([filterPlatform, filterStatus, filterTagId, searchKeyword], () => {
   page.value = 1
+  fetchMaterials()
 })
 
 const onSelectionChange = (sel) => {

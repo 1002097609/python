@@ -50,22 +50,26 @@ def list_materials(
     platform: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     status: Optional[int] = Query(None),
+    tag_id: Optional[int] = Query(None, description="按标签 ID 筛选"),
+    keyword: Optional[str] = Query(None, description="按标题关键词搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     """
-    分页查询素材列表，支持按平台、品类、状态进行筛选。
+    分页查询素材列表，支持按平台、品类、状态、标签、关键词进行筛选。
 
     请求参数（均为可选查询参数）：
         platform (str):   按投放平台筛选，如 "抖音"、"快手" 等。
         category (str):   按素材品类筛选，如 "护肤"、"零食" 等。
         status (int):     按素材状态筛选，如 0=未拆解、1=已拆解。
+        tag_id (int):     按标签 ID 筛选，只返回包含该标签的素材。
+        keyword (str):    按标题关键词模糊搜索。
         page (int):       页码，从 1 开始，默认值 1。
         page_size (int):  每页条数，范围 1-100，默认值 20。
 
     返回值：
-        list[MaterialResponse]: 素材列表，按创建时间倒序排列。
+        dict: 分页结果，包含 items / total / page / page_size。
     """
     # 构建基础查询
     query = db.query(Material)
@@ -77,6 +81,16 @@ def list_materials(
         query = query.filter(Material.category == category)
     if status is not None:
         query = query.filter(Material.status == status)
+
+    # 标签筛选：通过 material_tag 关联表 JOIN 过滤
+    if tag_id is not None:
+        from ..models.tag import MaterialTag
+        query = query.join(MaterialTag, Material.id == MaterialTag.material_id)
+        query = query.filter(MaterialTag.tag_id == tag_id)
+
+    # 关键词搜索：标题模糊匹配
+    if keyword:
+        query = query.filter(Material.title.contains(keyword))
 
     # 先查总数，再分页取数据
     total = query.count()
