@@ -465,6 +465,15 @@ const submitDismantleAndExtract = async () => {
 
 const extractSkeleton = async () => {
   if (!existingDismantle.value) return
+  try {
+    await ElMessageBox.confirm('确认从当前拆解记录提取骨架？提取后可在骨架库中查看。', '提取骨架', {
+      confirmButtonText: '确认提取',
+      cancelButtonText: '取消',
+      type: 'info',
+    })
+  } catch {
+    return  // 用户取消
+  }
   extracting.value = true
   try {
     await api.post(`/skeleton/from-dismantle/${existingDismantle.value.id}`)

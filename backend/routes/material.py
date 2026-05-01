@@ -168,5 +168,22 @@ def delete_material(material_id: int, db: Session = Depends(get_db)):
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="素材不存在")
+
+    # 级联删除：先删关联的拆解记录（dismantle → skeleton → fission → effect_data）
+    from ..models.dismantle import Dismantle
+    from ..models.fission import Fission
+    from ..models.effect_data import EffectData
+
+    dismantles = db.query(Dismantle).filter(Dismantle.material_id == material_id).all()
+    for dm in dismantles:
+        # 级联删除该拆解关联的骨架及其裂变记录
+        if dm.skeleton_id:
+            fissions = db.query(Fission).filter(Fission.skeleton_id == dm.skeleton_id).all()
+            for ff in fissions:
+                db.query(EffectData).filter(EffectData.fission_id == ff.id).delete()
+            db.query(Fission).filter(Fission.skeleton_id == dm.skeleton_id).delete()
+            db.query(Skeleton).filter(Skeleton.id == dm.skeleton_id).delete()
+        db.delete(dm)
+
     db.delete(material)
     db.commit()

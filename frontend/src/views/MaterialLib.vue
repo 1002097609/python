@@ -7,7 +7,7 @@
 
     <!-- 统计卡片 -->
     <div class="stats-row">
-      <div class="stat-card stat-total" :class="{ active: filterStatus === '' }" @click="filterStatus = ''">
+      <div class="stat-card stat-total" :class="{ active: filterStatus === null }" @click="filterStatus = null">
         <div class="stat-icon">📦</div>
         <div class="stat-info">
           <div class="stat-num">{{ materials.length }}</div>
@@ -186,7 +186,7 @@ const materials = ref([])
 const loading = ref(false)
 const searchKeyword = ref('')
 const filterPlatform = ref('')
-const filterStatus = ref('')
+const filterStatus = ref(null)
 const filterTagId = ref(null)
 const page = ref(1)
 const pageSize = ref(20)
@@ -243,7 +243,7 @@ const fetchMaterials = async () => {
   try {
     const params = { page: page.value, page_size: pageSize.value }
     if (filterPlatform.value) params.platform = filterPlatform.value
-    if (filterStatus.value !== '') params.status = filterStatus.value
+    if (filterStatus.value !== null) params.status = filterStatus.value
     if (filterTagId.value != null) params.tag_id = filterTagId.value
     if (searchKeyword.value) params.keyword = searchKeyword.value
     const { data } = await api.get('/material/', { params })

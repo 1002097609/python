@@ -134,6 +134,16 @@ def delete_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
     skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
     if not skeleton:
         raise HTTPException(status_code=404, detail="骨架不存在")
+
+    # 级联删除：先删关联的裂变记录和效果数据
+    from ..models.fission import Fission
+    from ..models.effect_data import EffectData
+
+    fissions = db.query(Fission).filter(Fission.skeleton_id == skeleton_id).all()
+    for ff in fissions:
+        db.query(EffectData).filter(EffectData.fission_id == ff.id).delete()
+    db.query(Fission).filter(Fission.skeleton_id == skeleton_id).delete()
+
     db.delete(skeleton)
     db.commit()
 

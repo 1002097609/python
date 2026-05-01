@@ -37,6 +37,8 @@ DEFAULT_OPTIONS = [
     {"group_key": "platform", "label": "抖音", "value": "抖音", "sort_order": 1},
     {"group_key": "platform", "label": "小红书", "value": "小红书", "sort_order": 2},
     {"group_key": "platform", "label": "快手", "value": "快手", "sort_order": 3},
+    {"group_key": "platform", "label": "B站", "value": "B站", "sort_order": 4},
+    {"group_key": "platform", "label": "微信视频号", "value": "微信视频号", "sort_order": 5},
 
     # ----------------------------------------------------------
     # 品类 (category) — 素材所属商品/服务品类

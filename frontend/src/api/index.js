@@ -7,6 +7,48 @@ const api = axios.create({
 })
 
 // ============================================================
+// 全局响应拦截器 — 统一错误处理
+// ============================================================
+import { ElMessage } from 'element-plus'
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      const { status, data } = error.response
+      // 401 未授权 → 提示登录（预留）
+      if (status === 401) {
+        ElMessage.error('登录已过期，请重新登录')
+      }
+      // 403 无权限
+      else if (status === 403) {
+        ElMessage.error('没有操作权限')
+      }
+      // 404 → 让组件自行处理（很多组件对 404 有特殊逻辑）
+      else if (status === 404) {
+        // 不弹全局提示，由组件判断
+      }
+      // 409 冲突 → 让组件自行处理
+      else if (status === 409) {
+        // 不弹全局提示，由组件判断
+      }
+      // 500 服务器错误
+      else if (status >= 500) {
+        ElMessage.error('服务器内部错误，请稍后重试')
+      }
+      // 其他错误（400 等）→ 让组件自行处理
+    } else if (error.code === 'ECONNABORTED') {
+      ElMessage.error('请求超时，请检查网络连接')
+    } else if (!navigator.onLine) {
+      ElMessage.error('网络已断开，请检查网络连接')
+    } else {
+      ElMessage.error('网络请求失败')
+    }
+    return Promise.reject(error)
+  }
+)
+
+// ============================================================
 // 选项数据（从数据库动态加载）
 // ============================================================
 

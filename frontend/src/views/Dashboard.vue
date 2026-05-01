@@ -61,13 +61,15 @@
       <!-- 品类分布饼图 -->
       <div class="card chart-card">
         <div class="chart-title">🏪 品类分布</div>
-        <div ref="categoryChartRef" class="chart-container"></div>
+        <div v-if="categoryData.length > 0" ref="categoryChartRef" class="chart-container"></div>
+        <div v-else class="chart-empty"><el-empty description="暂无品类数据" :image-size="60" /></div>
       </div>
 
       <!-- 裂变漏斗 -->
       <div class="card chart-card">
         <div class="chart-title">⚡ 裂变状态漏斗</div>
-        <div ref="fissionChartRef" class="chart-container"></div>
+        <div v-if="fissionData.length > 0" ref="fissionChartRef" class="chart-container"></div>
+        <div v-else class="chart-empty"><el-empty description="暂无裂变数据" :image-size="60" /></div>
       </div>
     </div>
 
@@ -371,7 +373,9 @@ onUnmounted(() => {
 <style scoped>
 .page { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
 
-.page-header { margin-bottom: 24px; }
+.page-header { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+.page-header-left { flex: 1; }
+.page-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .page-header h2 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
 .page-desc { font-size: 14px; color: #888; }
 
@@ -400,6 +404,9 @@ onUnmounted(() => {
 .stat-num { font-size: 24px; font-weight: 700; color: #1a1a2e; }
 .stat-label { font-size: 13px; color: #999; margin-top: 2px; }
 .stat-sub { font-size: 12px; color: #bbb; margin-top: 4px; }
+
+/* 图表空状态 */
+.chart-empty { display: flex; align-items: center; justify-content: center; height: 240px; }
 
 /* 图表区域 */
 .charts-row {
