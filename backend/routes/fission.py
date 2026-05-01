@@ -18,6 +18,7 @@ from typing import Optional
 from ..database import get_db
 from ..models.fission import Fission
 from ..models.skeleton import Skeleton
+from ..models.effect_data import EffectData
 
 # 创建裂变引擎专用路由器
 router = APIRouter()
@@ -226,4 +227,141 @@ def _predict_performance(skeleton, fission_mode) -> dict:
     return {
         "ctr": f"{base_ctr * factor * 0.9:.1f}%-{base_ctr * factor * 1.1:.1f}%",
         "roi": f"{base_roi * factor * 0.8:.1f}x-{base_roi * factor * 1.1:.1f}x",
+    }
+
+
+@router.get("/")
+def list_fissions(
+    skeleton_id: Optional[int] = None,
+    output_status: Optional[int] = None,
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = Depends(get_db),
+):
+    """
+    查询裂变记录列表，支持按骨架 ID 和产出状态筛选。
+
+    请求参数：
+        skeleton_id (int):   按骨架 ID 筛选（可选）
+        output_status (int): 按产出状态筛选（可选，0=草稿 1=待审核 2=已采用 3=已投放）
+        page (int):          页码，默认 1
+        page_size (int):     每页条数，默认 20
+
+    返回值：
+        list[dict]: 裂变记录列表，每条包含 fission 基本信息和关联的骨架名称
+    """
+    query = db.query(Fission)
+
+    # 按骨架 ID 筛选
+    if skeleton_id:
+        query = query.filter(Fission.skeleton_id == skeleton_id)
+    # 按产出状态筛选
+    if output_status is not None:
+        query = query.filter(Fission.output_status == output_status)
+
+    # 按创建时间倒序排列，最新的在前
+    items = query.order_by(Fission.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    # 组装返回数据，附带骨架名称便于前端展示
+    result = []
+    for item in items:
+        skeleton = db.query(Skeleton).filter(Skeleton.id == item.skeleton_id).first()
+        result.append({
+            "id": item.id,
+            "skeleton_id": item.skeleton_id,
+            "skeleton_name": skeleton.name if skeleton else "未知骨架",
+            "fission_mode": item.fission_mode,
+            "new_topic": item.new_topic,
+            "output_title": item.output_title,
+            "output_content": item.output_content,
+            "output_status": item.output_status,
+            "predicted_ctr": item.predicted_ctr,
+            "predicted_roi": item.predicted_roi,
+            "actual_ctr": float(item.actual_ctr) if item.actual_ctr else None,
+            "actual_roi": float(item.actual_roi) if item.actual_roi else None,
+            "created_at": item.created_at,
+        })
+    return result
+
+
+@router.delete("/{fission_id}")
+def delete_fission(fission_id: int, db: Session = Depends(get_db)):
+    """
+    删除指定裂变记录。
+
+    请求参数：
+        fission_id (int): 裂变记录 ID
+
+    返回值：
+        dict: 操作结果描述
+
+    异常：
+        HTTP 404: 当裂变记录不存在时抛出。
+    """
+    item = db.query(Fission).filter(Fission.id == fission_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="裂变记录不存在")
+    db.delete(item)
+    db.commit()
+    return {"message": "删除成功"}
+
+
+@router.get("/{fission_id}")
+def get_fission(fission_id: int, db: Session = Depends(get_db)):
+    """
+    查询单条裂变记录的详细信息。
+
+    请求参数：
+        fission_id (int): 裂变记录 ID
+
+    返回值:
+        dict: 裂变记录详情
+
+    异常：
+        HTTP 404: 当裂变记录不存在时抛出。
+    """
+    item = db.query(Fission).filter(Fission.id == fission_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="裂变记录不存在")
+
+    # 查询关联骨架信息
+    skeleton = db.query(Skeleton).filter(Skeleton.id == item.skeleton_id).first()
+
+    # 查询关联的效果数据记录
+    effects = db.query(EffectData).filter(EffectData.fission_id == item.id).all()
+
+    return {
+        "id": item.id,
+        "skeleton_id": item.skeleton_id,
+        "skeleton_name": skeleton.name if skeleton else "未知骨架",
+        "fission_mode": item.fission_mode,
+        "new_topic": item.new_topic,
+        "new_category": item.new_category,
+        "new_platform": item.new_platform,
+        "new_style": item.new_style,
+        "output_title": item.output_title,
+        "output_content": item.output_content,
+        "output_status": item.output_status,
+        "predicted_ctr": item.predicted_ctr,
+        "predicted_roi": item.predicted_roi,
+        "actual_ctr": float(item.actual_ctr) if item.actual_ctr else None,
+        "actual_roi": float(item.actual_roi) if item.actual_roi else None,
+        "effects": [
+            {
+                "id": e.id,
+                "platform": e.platform,
+                "impressions": e.impressions,
+                "clicks": e.clicks,
+                "ctr": float(e.ctr) if e.ctr else None,
+                "conversions": e.conversions,
+                "cvr": float(e.cvr) if e.cvr else None,
+                "cost": float(e.cost) if e.cost else None,
+                "revenue": float(e.revenue) if e.revenue else None,
+                "roi": float(e.roi) if e.roi else None,
+                "cpa": float(e.cpa) if e.cpa else None,
+                "stat_date": str(e.stat_date) if e.stat_date else None,
+            }
+            for e in effects
+        ],
+        "created_at": item.created_at,
     }

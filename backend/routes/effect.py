@@ -139,3 +139,42 @@ def _update_skeleton_stats(db, skeleton_id: int):
         if skeleton:
             skeleton.avg_roi = result.avg_roi
             skeleton.avg_ctr = result.avg_ctr
+
+
+@router.get("/fission/{fission_id}")
+def get_fission_effects(fission_id: int, db: Session = Depends(get_db)):
+    """
+    查询指定裂变素材的所有效果数据记录。
+
+    用于在裂变记录详情页展示该素材的投放效果趋势。
+    一个裂变素材可能有多条效果数据记录（按日期分组）。
+
+    请求参数：
+        fission_id (int): 裂变记录 ID
+
+    返回值:
+        list[dict]: 效果数据列表，按统计日期升序排列
+    """
+    effects = (
+        db.query(EffectData)
+        .filter(EffectData.fission_id == fission_id)
+        .order_by(EffectData.stat_date.asc())
+        .all()
+    )
+    return [
+        {
+            "id": e.id,
+            "platform": e.platform,
+            "impressions": e.impressions,
+            "clicks": e.clicks,
+            "ctr": float(e.ctr) if e.ctr else None,
+            "conversions": e.conversions,
+            "cvr": float(e.cvr) if e.cvr else None,
+            "cost": float(e.cost) if e.cost else None,
+            "revenue": float(e.revenue) if e.revenue else None,
+            "roi": float(e.roi) if e.roi else None,
+            "cpa": float(e.cpa) if e.cpa else None,
+            "stat_date": str(e.stat_date) if e.stat_date else None,
+        }
+        for e in effects
+    ]
