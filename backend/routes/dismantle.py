@@ -1,3 +1,17 @@
+"""
+拆解引擎路由模块（routes/dismantle.py）。
+
+提供素材的五层拆解（L1-L5）相关接口，负责将营销素材从抽象到具体逐层拆分为：
+  L1 主题层、L2 策略层、L3 结构层、L4 元素层、L5 表达层。
+拆解完成后，素材状态自动更新为"已拆解"。
+
+路由列表：
+  POST /api/dismantle/                     - 创建拆解记录
+  GET  /api/dismantle/{id}                 - 根据拆解 ID 查询拆解详情
+  GET  /api/dismantle/by-material/{id}     - 根据素材 ID 查询对应的拆解记录
+  PUT  /api/dismantle/{id}                 - 更新拆解记录
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -6,20 +20,37 @@ from ..models.dismantle import Dismantle
 from ..models.material import Material
 from ..schemas.dismantle import DismantleCreate, DismantleUpdate, DismantleResponse
 
+# 创建拆解引擎专用路由器
 router = APIRouter()
 
 
 @router.post("/", response_model=DismantleResponse, status_code=201)
 def create_dismantle(data: DismantleCreate, db: Session = Depends(get_db)):
-    # 检查素材是否存在
+    """
+    为指定素材创建 L1-L5 拆解记录。
+
+    首先校验关联素材是否存在，若存在则创建拆解记录，并将素材状态更新为"已拆解"（status=1）。
+    素材与拆解记录为一对一关系。
+
+    请求参数：
+        data (DismantleCreate): 拆解数据模型，包含 material_id 和 L1-L5 各层字段。
+
+    返回值：
+        DismantleResponse: 创建成功的拆解记录对象。
+
+    异常：
+        HTTP 404: 当关联的素材 ID 不存在时抛出。
+    """
+    # 校验关联素材是否存在，确保拆解操作的数据完整性
     material = db.query(Material).filter(Material.id == data.material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="素材不存在")
 
+    # 创建拆解 ORM 实例并写入数据库
     dismantle = Dismantle(**data.model_dump())
     db.add(dismantle)
 
-    # 更新素材状态为"已拆解"
+    # 同步更新素材状态为"已拆解"（1=已拆解，0=未拆解）
     material.status = 1
 
     db.commit()
@@ -29,6 +60,18 @@ def create_dismantle(data: DismantleCreate, db: Session = Depends(get_db)):
 
 @router.get("/{dismantle_id}", response_model=DismantleResponse)
 def get_dismantle(dismantle_id: int, db: Session = Depends(get_db)):
+    """
+    根据拆解记录 ID 查询拆解详情。
+
+    请求参数：
+        dismantle_id (int): 拆解记录的唯一标识 ID。
+
+    返回值：
+        DismantleResponse: 完整的拆解记录，包含 L1-L5 各层数据。
+
+    异常：
+        HTTP 404: 当拆解记录不存在时抛出。
+    """
     dismantle = db.query(Dismantle).filter(Dismantle.id == dismantle_id).first()
     if not dismantle:
         raise HTTPException(status_code=404, detail="拆解记录不存在")
@@ -37,6 +80,21 @@ def get_dismantle(dismantle_id: int, db: Session = Depends(get_db)):
 
 @router.get("/by-material/{material_id}", response_model=DismantleResponse)
 def get_dismantle_by_material(material_id: int, db: Session = Depends(get_db)):
+    """
+    根据素材 ID 查询对应的拆解记录。
+
+    由于素材与拆解记录为一对一关系，此接口通过素材 ID 直接定位拆解数据，
+    方便前端在查看素材详情时直接获取拆解信息。
+
+    请求参数：
+        material_id (int): 素材的唯一标识 ID。
+
+    返回值：
+        DismantleResponse: 该素材对应的拆解记录。
+
+    异常：
+        HTTP 404: 当该素材尚未拆解或素材不存在时抛出。
+    """
     dismantle = db.query(Dismantle).filter(Dismantle.material_id == material_id).first()
     if not dismantle:
         raise HTTPException(status_code=404, detail="该素材尚未拆解")
@@ -45,11 +103,29 @@ def get_dismantle_by_material(material_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{dismantle_id}", response_model=DismantleResponse)
 def update_dismantle(dismantle_id: int, data: DismantleUpdate, db: Session = Depends(get_db)):
+    """
+    更新拆解记录。支持部分更新（仅传入需要修改的字段）。
+
+    可用于人工修正 AI 辅助拆解后的各层数据，或补充 skeleton_id 关联信息。
+
+    请求参数：
+        dismantle_id (int):        要更新的拆解记录 ID。
+        data (DismantleUpdate):    更新模型，所有字段均为可选。
+
+    返回值：
+        DismantleResponse: 更新后的完整拆解记录。
+
+    异常：
+        HTTP 404: 当拆解记录不存在时抛出。
+    """
     dismantle = db.query(Dismantle).filter(Dismantle.id == dismantle_id).first()
     if not dismantle:
         raise HTTPException(status_code=404, detail="拆解记录不存在")
+
+    # 仅更新调用方实际传入的字段（exclude_unset=True 保证部分更新语义）
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(dismantle, key, value)
+
     db.commit()
     db.refresh(dismantle)
     return dismantle

@@ -1,3 +1,17 @@
+"""
+素材管理路由模块（routes/material.py）。
+
+提供营销素材的完整 CRUD（增删改查）接口，支持按平台、品类、状态进行筛选分页查询。
+素材是系统中最基础的数据单元，所有拆解操作均以素材为入口。
+
+路由列表：
+  POST   /api/material/         - 创建新素材
+  GET    /api/material/         - 分页查询素材列表（支持筛选）
+  GET    /api/material/{id}     - 查询单个素材详情
+  PUT    /api/material/{id}     - 更新素材信息
+  DELETE /api/material/{id}     - 删除素材
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -5,15 +19,29 @@ from ..database import get_db
 from ..models.material import Material
 from ..schemas.material import MaterialCreate, MaterialUpdate, MaterialResponse
 
+# 创建素材管理专用路由器
 router = APIRouter()
 
 
 @router.post("/", response_model=MaterialResponse, status_code=201)
 def create_material(data: MaterialCreate, db: Session = Depends(get_db)):
+    """
+    创建新素材。
+
+    接收素材的基本信息（标题、内容、平台、品类等），在数据库中创建一条新的素材记录。
+    创建成功后返回完整的素材数据（含自动生成的 id 和时间戳）。
+
+    请求参数：
+        data (MaterialCreate): 素材创建模型，包含 title、content 等字段。
+
+    返回值：
+        MaterialResponse: 创建成功的素材对象，HTTP 状态码 201。
+    """
+    # 将 Pydantic 模型数据转为字典后直接解构为 ORM 模型实例
     material = Material(**data.model_dump())
     db.add(material)
-    db.commit()
-    db.refresh(material)
+    db.commit()       # 提交事务，写入数据库
+    db.refresh(material)  # 刷新实例，获取数据库自动生成的字段（如 id、created_at）
     return material
 
 
@@ -26,19 +54,49 @@ def list_materials(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    """
+    分页查询素材列表，支持按平台、品类、状态进行筛选。
+
+    请求参数（均为可选查询参数）：
+        platform (str):   按投放平台筛选，如 "抖音"、"快手" 等。
+        category (str):   按素材品类筛选，如 "护肤"、"零食" 等。
+        status (int):     按素材状态筛选，如 0=未拆解、1=已拆解。
+        page (int):       页码，从 1 开始，默认值 1。
+        page_size (int):  每页条数，范围 1-100，默认值 20。
+
+    返回值：
+        list[MaterialResponse]: 素材列表，按创建时间倒序排列。
+    """
+    # 构建基础查询
     query = db.query(Material)
+
+    # 根据传入的筛选条件动态追加过滤子句
     if platform:
         query = query.filter(Material.platform == platform)
     if category:
         query = query.filter(Material.category == category)
     if status is not None:
         query = query.filter(Material.status == status)
+
+    # 按创建时间倒序排列，应用分页偏移量，执行查询
     items = query.order_by(Material.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return items
 
 
 @router.get("/{material_id}", response_model=MaterialResponse)
 def get_material(material_id: int, db: Session = Depends(get_db)):
+    """
+    根据素材 ID 查询单个素材的详细信息。
+
+    请求参数：
+        material_id (int): 素材的唯一标识 ID。
+
+    返回值：
+        MaterialResponse: 素材详情对象。
+
+    异常：
+        HTTP 404: 当指定 ID 的素材不存在时抛出。
+    """
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="素材不存在")
@@ -47,11 +105,27 @@ def get_material(material_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{material_id}", response_model=MaterialResponse)
 def update_material(material_id: int, data: MaterialUpdate, db: Session = Depends(get_db)):
+    """
+    更新指定素材的信息。支持部分更新（仅传入需要修改的字段）。
+
+    请求参数：
+        material_id (int): 要更新的素材 ID。
+        data (MaterialUpdate): 更新数据模型，所有字段均为可选。
+
+    返回值：
+        MaterialResponse: 更新后的完整素材对象。
+
+    异常：
+        HTTP 404: 当指定 ID 的素材不存在时抛出。
+    """
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="素材不存在")
+
+    # 使用 exclude_unset=True 仅获取调用方实际传入的字段，实现部分更新
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(material, key, value)
+
     db.commit()
     db.refresh(material)
     return material
@@ -59,6 +133,18 @@ def update_material(material_id: int, data: MaterialUpdate, db: Session = Depend
 
 @router.delete("/{material_id}", status_code=204)
 def delete_material(material_id: int, db: Session = Depends(get_db)):
+    """
+    删除指定的素材记录。
+
+    请求参数：
+        material_id (int): 要删除的素材 ID。
+
+    返回值：
+        无返回体，HTTP 状态码 204 表示删除成功。
+
+    异常：
+        HTTP 404: 当指定 ID 的素材不存在时抛出。
+    """
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="素材不存在")
