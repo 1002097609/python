@@ -19,4 +19,4 @@ if __name__ == "__main__":
     print("[OK] 数据库就绪")
     print("[START] 启动 FastAPI: http://localhost:8001")
     print("[DOCS] Swagger 文档:  http://localhost:8001/docs")
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="127.0.0.1", port=8002, reload=False)

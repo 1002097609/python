@@ -1,17 +1,30 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+from decimal import Decimal
 from ..database import get_db
 from ..models.skeleton import Skeleton
 
 router = APIRouter()
 
 
-@router.get("/", response_model=list[dict])
+def _skeleton_to_dict(s: Skeleton) -> dict:
+    return {
+        "id": s.id,
+        "name": s.name,
+        "skeleton_type": s.skeleton_type,
+        "usage_count": s.usage_count,
+        "avg_roi": float(s.avg_roi) if isinstance(s.avg_roi, Decimal) else s.avg_roi,
+        "avg_ctr": float(s.avg_ctr) if isinstance(s.avg_ctr, Decimal) else s.avg_ctr,
+        "created_at": s.created_at,
+    }
+
+
+@router.get("/")
 def list_skeletons(
     platform: Optional[str] = Query(None),
     skeleton_type: Optional[str] = Query(None),
-    sort_by: str = Query("usage_count", regex="^(usage_count|avg_roi|avg_ctr|created_at)$"),
+    sort_by: str = Query("usage_count", pattern="^(usage_count|avg_roi|avg_ctr|created_at)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -26,7 +39,7 @@ def list_skeletons(
     query = query.order_by(sort_column.desc())
 
     items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return items
+    return [_skeleton_to_dict(i) for i in items]
 
 
 @router.get("/{skeleton_id}")
