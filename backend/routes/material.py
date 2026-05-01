@@ -45,7 +45,7 @@ def create_material(data: MaterialCreate, db: Session = Depends(get_db)):
     return material
 
 
-@router.get("/", response_model=list[MaterialResponse])
+@router.get("/")
 def list_materials(
     platform: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
@@ -78,9 +78,15 @@ def list_materials(
     if status is not None:
         query = query.filter(Material.status == status)
 
-    # 按创建时间倒序排列，应用分页偏移量，执行查询
+    # 先查总数，再分页取数据
+    total = query.count()
     items = query.order_by(Material.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    return items
+    return {
+        "items": [MaterialResponse.model_validate(i).model_dump() for i in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/{material_id}", response_model=MaterialResponse)

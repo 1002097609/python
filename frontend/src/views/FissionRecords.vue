@@ -55,7 +55,7 @@
       </div>
 
       <!-- 记录表格 -->
-      <el-table :data="filteredRecords" stripe style="width:100%">
+      <el-table :data="records" stripe style="width:100%">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column label="骨架" min-width="160">
           <template #default="{ row }">
@@ -106,6 +106,18 @@
           <el-empty description="暂无裂变记录" :image-size="80" />
         </template>
       </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-wrap" v-if="totalCount > pageSize">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50]"
+          :total="totalCount"
+          layout="total, sizes, prev, pager, next"
+          @change="fetchRecords"
+        />
+      </div>
     </div>
 
     <!-- 详情弹窗 -->
@@ -279,7 +291,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, getOptions } from '../api'
 
@@ -287,9 +299,13 @@ import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, ge
 // 数据状态
 // ============================================================
 const records = ref([])
+const loading = ref(false)
 const skeletons = ref([])
 const filterStatus = ref(null)
 const filterSkeleton = ref(null)
+const page = ref(1)
+const pageSize = ref(20)
+const totalCount = ref(0)
 const detailVisible = ref(false)
 const currentRecord = ref(null)
 const effectDialogVisible = ref(false)
@@ -354,21 +370,7 @@ const skeletonOptions = computed(() => {
 })
 
 // ============================================================
-// 筛选后的记录列表
-// ============================================================
-const filteredRecords = computed(() => {
-  let list = records.value
-  if (filterStatus.value !== null && filterStatus.value !== '') {
-    list = list.filter(r => r.output_status === filterStatus.value)
-  }
-  if (filterSkeleton.value !== null && filterSkeleton.value !== '') {
-    list = list.filter(r => r.skeleton_id === filterSkeleton.value)
-  }
-  return list
-})
-
-// ============================================================
-// 统计数据
+// 统计数据（基于当前页数据，精确统计需后端接口）
 // ============================================================
 const draftCount = computed(() => records.value.filter(r => r.output_status === 0).length)
 const runningCount = computed(() => records.value.filter(r => r.output_status === 3).length)
@@ -404,13 +406,29 @@ const formatDate = (d) => {
 // 数据加载
 // ============================================================
 const fetchRecords = async () => {
+  loading.value = true
   try {
-    const data = await getFissions()
-    records.value = data
+    const params = { page: page.value, page_size: pageSize.value }
+    if (filterStatus.value !== null && filterStatus.value !== '') params.output_status = filterStatus.value
+    if (filterSkeleton.value !== null && filterSkeleton.value !== '') params.skeleton_id = filterSkeleton.value
+    const data = await getFissions(params)
+    if (Array.isArray(data)) {
+      records.value = data
+      totalCount.value = data.length
+    } else {
+      records.value = data.items || []
+      totalCount.value = data.total || 0
+    }
   } catch (e) {
     ElMessage.error('加载裂变记录失败')
   }
+  loading.value = false
 }
+
+// 筛选变化时重置页码
+watch([filterStatus, filterSkeleton], () => {
+  page.value = 1
+})
 
 const fetchSkeletons = async () => {
   try {
@@ -573,4 +591,7 @@ onMounted(() => {
 
 /* 表单提示 */
 .form-hint { font-size: 12px; color: #bbb; margin-left: 4px; }
+
+/* 分页 */
+.pagination-wrap { display: flex; justify-content: flex-end; margin-top: 20px; }
 </style>

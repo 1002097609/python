@@ -83,9 +83,15 @@ def list_skeletons(
     sort_column = getattr(Skeleton, sort_by, Skeleton.usage_count)
     query = query.order_by(sort_column.desc())
 
-    # 应用分页并执行查询，将 ORM 对象转为可序列化的字典
+    # 先查总数，再分页取数据
+    total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return [_skeleton_to_dict(i) for i in items]
+    return {
+        "items": [_skeleton_to_dict(i) for i in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/{skeleton_id}")

@@ -352,7 +352,8 @@ def list_fissions(
     if output_status is not None:
         query = query.filter(Fission.output_status == output_status)
 
-    # 按创建时间倒序排列，最新的在前
+    # 先查总数，再分页取数据
+    total = query.count()
     items = query.order_by(Fission.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     # 组装返回数据，附带骨架名称便于前端展示
@@ -374,7 +375,7 @@ def list_fissions(
             "actual_roi": float(item.actual_roi) if item.actual_roi else None,
             "created_at": item.created_at,
         })
-    return result
+    return {"items": result, "total": total, "page": page, "page_size": page_size}
 
 
 @router.delete("/{fission_id}")

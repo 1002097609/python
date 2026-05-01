@@ -35,6 +35,7 @@
         <div class="toolbar-left">
           <span class="dot"></span>
           <span class="card-title">素材列表</span>
+          <el-tag v-if="selection.length" size="small" type="primary" style="margin-left:8px">已选 {{ selection.length }} 个</el-tag>
         </div>
         <div class="toolbar-right">
           <el-select v-model="filterPlatform" placeholder="平台" clearable style="width:120px">
@@ -47,7 +48,20 @@
         </div>
       </div>
 
-      <el-table :data="filteredMaterials" stripe style="width:100%">
+      <!-- 批量操作栏 -->
+      <div class="batch-bar" v-if="selection.length">
+        <span class="batch-hint">已选择 {{ selection.length }} 个素材</span>
+        <div class="batch-actions">
+          <el-select v-model="batchTagId" placeholder="批量添加标签" size="small" style="width:160px">
+            <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+          <el-button type="primary" size="small" @click="batchAddTag" :loading="batchLoading">添加标签</el-button>
+          <el-button type="danger" size="small" @click="batchDelete" :loading="batchLoading">批量删除</el-button>
+        </div>
+      </div>
+
+      <el-table :data="materials" stripe style="width:100%" @selection-change="onSelectionChange" ref="tableRef">
+        <el-table-column type="selection" width="42" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="platform" label="平台" width="100">
@@ -91,6 +105,18 @@
           <el-empty description="暂无素材" :image-size="80" />
         </template>
       </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-wrap" v-if="totalCount > pageSize">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50]"
+          :total="totalCount"
+          layout="total, sizes, prev, pager, next"
+          @change="fetchMaterials"
+        />
+      </div>
     </div>
 
     <!-- 素材详情弹窗 -->
@@ -149,7 +175,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMaterialTag } from '../api'
@@ -157,16 +183,26 @@ import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMateri
 const router = useRouter()
 
 const materials = ref([])
+const loading = ref(false)
 const searchKeyword = ref('')
 const filterPlatform = ref('')
 const filterStatus = ref('')
 const filterTagId = ref(null)
+const page = ref(1)
+const pageSize = ref(20)
+const totalCount = ref(0)
 const allTags = ref([])
-const materialTagsMap = ref({})   // materialId -> [tag, ...]
+const materialTagsMap = ref({})
 const detailVisible = ref(false)
 const currentMaterial = ref(null)
 const currentMaterialTags = ref([])
 const selectedTagForAdd = ref(null)
+
+// 批量操作
+const selection = ref([])
+const batchTagId = ref(null)
+const batchLoading = ref(false)
+const tableRef = ref(null)
 
 const options = ref({
   material_status: [],
@@ -186,18 +222,6 @@ const platforms = computed(() => {
   return [...set]
 })
 
-const filteredMaterials = computed(() => {
-  let list = materials.value
-  if (filterStatus.value !== '') list = list.filter(m => m.status === filterStatus.value)
-  if (filterPlatform.value) list = list.filter(m => m.platform === filterPlatform.value)
-  if (filterTagId.value != null) list = list.filter(m => (materialTagsMap.value[m.id] || []).some(t => t.id === filterTagId.value))
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase()
-    list = list.filter(m => m.title.toLowerCase().includes(kw))
-  }
-  return list
-})
-
 const pendingCount = computed(() => materials.value.filter(m => m.status === 0).length)
 const doneCount = computed(() => materials.value.filter(m => m.status === 1).length)
 
@@ -215,16 +239,36 @@ const formatDate = (d) => {
 }
 
 const fetchMaterials = async () => {
+  loading.value = true
   try {
-    const { data } = await api.get('/material/')
-    materials.value = data
-    // load tags for each material
-    for (const m of data) {
+    const params = { page: page.value, page_size: pageSize.value }
+    if (filterPlatform.value) params.platform = filterPlatform.value
+    if (filterStatus.value !== '') params.status = filterStatus.value
+    const { data } = await api.get('/material/', { params })
+    if (Array.isArray(data)) {
+      materials.value = data
+      totalCount.value = data.length
+    } else {
+      materials.value = data.items || []
+      totalCount.value = data.total || 0
+    }
+    // 加载标签
+    for (const m of materials.value) {
       fetchMaterialTagsList(m.id)
     }
   } catch (e) {
     ElMessage.error('加载失败')
   }
+  loading.value = false
+}
+
+// 筛选变化时重新加载
+watch([filterPlatform, filterStatus], () => {
+  page.value = 1
+})
+
+const onSelectionChange = (sel) => {
+  selection.value = sel
 }
 
 const viewDetail = async (row) => {
@@ -260,6 +304,51 @@ const handleDelete = (row) => {
   }).catch(() => {})
 }
 
+// ---- 批量操作 ----
+const batchAddTag = async () => {
+  if (!batchTagId.value) {
+    ElMessage.warning('请选择标签')
+    return
+  }
+  if (!selection.value.length) return
+  batchLoading.value = true
+  let success = 0
+  for (const row of selection.value) {
+    try {
+      await addMaterialTag(row.id, batchTagId.value)
+      await fetchMaterialTagsList(row.id)
+      success++
+    } catch (e) {
+      // skip
+    }
+  }
+  batchLoading.value = false
+  ElMessage.success(`已为 ${success} 个素材添加标签`)
+  batchTagId.value = null
+}
+
+const batchDelete = async () => {
+  if (!selection.value.length) return
+  ElMessageBox.confirm(`确认删除选中的 ${selection.value.length} 个素材？`, '警告', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+  }).then(async () => {
+    batchLoading.value = true
+    let success = 0
+    for (const row of selection.value) {
+      try {
+        await api.delete(`/material/${row.id}`)
+        success++
+      } catch (e) { /* skip */ }
+    }
+    batchLoading.value = false
+    ElMessage.success(`已删除 ${success} 个素材`)
+    selection.value = []
+    await fetchMaterials()
+  }).catch(() => {})
+}
+
 // ---- Tags ----
 const fetchTags = async () => {
   try {
@@ -282,7 +371,6 @@ const addTag = async (materialId, tagId) => {
   try {
     await addMaterialTag(materialId, tagId)
     await fetchMaterialTagsList(materialId)
-    // sync currentMaterialTags if detail dialog is open for this material
     if (currentMaterial.value && currentMaterial.value.id === materialId) {
       currentMaterialTags.value = materialTagsMap.value[materialId] || []
     }
@@ -340,6 +428,18 @@ onMounted(() => {
 .dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); }
 .card-title { font-size: 15px; font-weight: 600; color: #333; }
 .text-muted { color: #ccc; }
+
+/* 批量操作栏 */
+.batch-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; padding: 10px 16px;
+  background: #f0f4ff; border-radius: 8px; border: 1px solid #d0d8f0;
+}
+.batch-hint { font-size: 13px; color: #667eea; font-weight: 500; }
+.batch-actions { display: flex; align-items: center; gap: 8px; }
+
+/* 分页 */
+.pagination-wrap { display: flex; justify-content: flex-end; margin-top: 20px; }
 
 /* Detail dialog */
 .detail-body { display: flex; flex-direction: column; gap: 14px; }
