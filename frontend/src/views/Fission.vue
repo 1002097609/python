@@ -182,7 +182,7 @@ const options = ref({
 const fissionModes = computed(() => {
   const icons = { replace_leaf: '🍃', replace_style: '🎨', replace_branch: '🌿' }
   const rates = { replace_leaf: '~85%', replace_style: '~70%', replace_branch: '~65%' }
-  return (options.value.fission_modes || []).map((m) => ({
+  return (options.value.fission_mode || []).map((m) => ({
     label: m.label,
     value: m.value,
     desc: m.desc || '',
