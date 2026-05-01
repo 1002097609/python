@@ -2,7 +2,7 @@
   <div class="page">
     <div class="page-header">
       <h2>⚡ 素材裂变</h2>
-      <p class="page-desc">选择骨架 + 新内容，批量产出新素材。效果保留率：换叶子 85% / 换表达 70% / 换枝杈 65%</p>
+      <p class="page-desc">选择骨架 + 新内容，批量产出新素材</p>
     </div>
 
     <div class="card">
@@ -12,10 +12,31 @@
         <div class="step-content">
           <div class="step-title">选择骨架</div>
           <div class="step-desc">选择一个已提取的骨架作为裂变模板</div>
-          <el-select v-model="selectedSkeleton" placeholder="🔍 选择骨架" @change="onSkeletonChange" style="width:100%; margin-top:12px" size="large">
-            <el-option v-for="sk in skeletons" :key="sk.id" :label="`${sk.name} (使用${sk.usage_count||0}次)`" :value="sk.id" />
+          <el-select
+            v-model="selectedSkeleton"
+            placeholder="🔍 选择骨架"
+            @change="onSkeletonChange"
+            style="width:100%; margin-top:12px"
+            size="large"
+            :loading="loadingOptions"
+          >
+            <el-option
+              v-for="sk in skeletons"
+              :key="sk.id"
+              :label="sk.name"
+              :value="sk.id"
+            >
+              <div class="skeleton-option">
+                <span class="sk-name">{{ sk.name }}</span>
+                <span class="sk-meta">
+                  {{ sk.skeleton_type }} · 使用{{ sk.usage_count || 0 }}次
+                  <template v-if="sk.avg_roi"> · ROI {{ Number(sk.avg_roi).toFixed(1) }}x</template>
+                  <template v-if="sk.avg_ctr"> · CTR {{ Number(sk.avg_ctr).toFixed(1) }}%</template>
+                </span>
+              </div>
+            </el-option>
           </el-select>
-          <div v-if="skeletons.length === 0" class="step-empty">
+          <div v-if="skeletons.length === 0 && !loadingSkeleton" class="step-empty">
             暂无骨架，请先在「素材拆解」页面提取骨架
           </div>
         </div>
@@ -30,24 +51,18 @@
           <div class="step-title">选择裂变模式</div>
           <div class="step-desc">不同模式决定保留和替换的内容层级</div>
           <div class="mode-cards">
-            <div class="mode-card" :class="{ active: fissionMode === 'replace_leaf' }" @click="fissionMode = 'replace_leaf'">
-              <div class="mode-icon">🍃</div>
-              <div class="mode-name">换叶子</div>
-              <div class="mode-desc">同构异内容</div>
-              <div class="mode-rate">效果保留 ~85%</div>
-              <div class="mode-recommend" v-if="fissionMode === 'replace_leaf'">✓ 推荐</div>
-            </div>
-            <div class="mode-card" :class="{ active: fissionMode === 'replace_style' }" @click="fissionMode = 'replace_style'">
-              <div class="mode-icon">🎨</div>
-              <div class="mode-name">换表达</div>
-              <div class="mode-desc">跨风格移植</div>
-              <div class="mode-rate">效果保留 ~70%</div>
-            </div>
-            <div class="mode-card" :class="{ active: fissionMode === 'replace_branch' }" @click="fissionMode = 'replace_branch'">
-              <div class="mode-icon">🌿</div>
-              <div class="mode-name">换枝杈</div>
-              <div class="mode-desc">同内容异结构</div>
-              <div class="mode-rate">效果保留 ~65%</div>
+            <div
+              class="mode-card"
+              v-for="mode in fissionModes"
+              :key="mode.value"
+              :class="{ active: fissionMode === mode.value }"
+              @click="fissionMode = mode.value"
+            >
+              <div class="mode-icon">{{ mode.icon }}</div>
+              <div class="mode-name">{{ mode.label }}</div>
+              <div class="mode-desc">{{ mode.desc }}</div>
+              <div class="mode-rate" v-if="mode.rate">效果保留 {{ mode.rate }}</div>
+              <div class="mode-recommend" v-if="fissionMode === mode.value">✓ 已选</div>
             </div>
           </div>
         </div>
@@ -71,10 +86,7 @@
               <el-col :span="12">
                 <el-form-item label="新品类">
                   <el-select v-model="fissionForm.new_category" placeholder="选择品类" style="width:100%">
-                    <el-option label="护肤" value="护肤" />
-                    <el-option label="彩妆" value="彩妆" />
-                    <el-option label="零食" value="零食" />
-                    <el-option label="母婴" value="母婴" />
+                    <el-option v-for="opt in options.categories" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -83,10 +95,7 @@
               <el-col :span="12">
                 <el-form-item label="新风格">
                   <el-select v-model="fissionForm.new_style" placeholder="选择风格" style="width:100%">
-                    <el-option label="成分党" value="成分党" />
-                    <el-option label="闺蜜聊天" value="闺蜜聊天" />
-                    <el-option label="毒舌测评" value="毒舌测评" />
-                    <el-option label="温柔种草" value="温柔种草" />
+                    <el-option v-for="opt in options.styles" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -144,15 +153,38 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '../api'
+import api, { getOptions } from '../api'
 
 const loading = ref(false)
+const loadingOptions = ref(false)
+const loadingSkeleton = ref(false)
 const skeletons = ref([])
 const selectedSkeleton = ref(null)
 const fissionMode = ref('replace_leaf')
 const fissionResult = ref(null)
+
+const options = ref({
+  platforms: [],
+  categories: [],
+  styles: [],
+  strategies: [],
+  skeleton_types: [],
+  fission_modes: [],
+})
+
+const fissionModes = computed(() => {
+  const icons = { replace_leaf: '🍃', replace_style: '🎨', replace_branch: '🌿' }
+  const rates = { replace_leaf: '~85%', replace_style: '~70%', replace_branch: '~65%' }
+  return (options.value.fission_modes || []).map((m) => ({
+    label: m.label,
+    value: m.value,
+    desc: m.desc || '',
+    icon: icons[m.value] || '⚡',
+    rate: rates[m.value] || '',
+  }))
+})
 
 const fissionForm = reactive({
   skeleton_id: null,
@@ -163,13 +195,26 @@ const fissionForm = reactive({
   replacement: { L5: { golden_sentences: [], data_refs: [] } },
 })
 
+const fetchOptions = async () => {
+  loadingOptions.value = true
+  try {
+    const data = await getOptions()
+    options.value = data
+  } catch (e) {
+    ElMessage.error('加载选项数据失败')
+  }
+  loadingOptions.value = false
+}
+
 const fetchSkeletons = async () => {
+  loadingSkeleton.value = true
   try {
     const { data } = await api.get('/skeleton/')
     skeletons.value = data
   } catch (e) {
     console.error('加载骨架失败', e)
   }
+  loadingSkeleton.value = false
 }
 
 const onSkeletonChange = (val) => {
@@ -187,10 +232,7 @@ const executeFission = async () => {
   }
   loading.value = true
   try {
-    const payload = {
-      ...fissionForm,
-      fission_mode: fissionMode.value,
-    }
+    const payload = { ...fissionForm, fission_mode: fissionMode.value }
     const { data } = await api.post('/fission/', payload)
     fissionResult.value = data
     ElMessage.success('裂变成功！')
@@ -215,7 +257,10 @@ const resetFission = () => {
   fissionForm.replacement = { L5: { golden_sentences: [], data_refs: [] } }
 }
 
-onMounted(fetchSkeletons)
+onMounted(() => {
+  fetchOptions()
+  fetchSkeletons()
+})
 </script>
 
 <style scoped>
@@ -239,6 +284,11 @@ onMounted(fetchSkeletons)
 .step-title { font-size: 16px; font-weight: 600; color: #333; }
 .step-desc { font-size: 13px; color: #999; margin-top: 2px; }
 .step-empty { margin-top: 12px; padding: 16px; background: #fff8e6; border-radius: 8px; font-size: 13px; color: #e6a700; text-align: center; }
+
+/* Skeleton option in dropdown */
+.skeleton-option { display: flex; flex-direction: column; gap: 2px; }
+.sk-name { font-size: 14px; color: #333; }
+.sk-meta { font-size: 12px; color: #999; }
 
 .divider { height: 1px; background: #f0f0f0; margin: 24px 0; }
 

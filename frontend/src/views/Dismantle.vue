@@ -20,19 +20,14 @@
           <el-col :span="12">
             <el-form-item label="平台">
               <el-select v-model="materialForm.platform" placeholder="选择平台" style="width:100%">
-                <el-option label="抖音" value="抖音" />
-                <el-option label="小红书" value="小红书" />
-                <el-option label="快手" value="快手" />
+                <el-option v-for="opt in options.platforms" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="品类">
               <el-select v-model="materialForm.category" placeholder="选择品类" style="width:100%">
-                <el-option label="护肤" value="护肤" />
-                <el-option label="彩妆" value="彩妆" />
-                <el-option label="零食" value="零食" />
-                <el-option label="母婴" value="母婴" />
+                <el-option v-for="opt in options.categories" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -88,10 +83,7 @@
           <div class="layer-body">
             <el-form-item label="策略标签">
               <el-select v-model="dismantleForm.l2_strategy" multiple placeholder="选择策略" style="width:100%">
-                <el-option label="共鸣型" value="共鸣型" />
-                <el-option label="成分党" value="成分党" />
-                <el-option label="对比测评" value="对比测评" />
-                <el-option label="悬念型" value="悬念型" />
+                <el-option v-for="opt in options.strategies" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="情绪策略">
@@ -192,12 +184,32 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '../api'
+import api, { getOptions } from '../api'
 
 const loading = ref(false)
 const currentMaterial = ref(null)
+
+const options = ref({
+  platforms: [],
+  categories: [],
+  styles: [],
+  strategies: [],
+  skeleton_types: [],
+  fission_modes: [],
+})
+
+const fetchOptions = async () => {
+  try {
+    const data = await getOptions()
+    options.value = data
+  } catch (e) {
+    console.error('加载选项失败', e)
+  }
+}
+
+onMounted(fetchOptions)
 
 const materialForm = reactive({
   title: '',

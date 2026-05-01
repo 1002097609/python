@@ -5,4 +5,9 @@ const api = axios.create({
   timeout: 10000,
 })
 
+export async function getOptions() {
+  const { data } = await api.get('/options/')
+  return data
+}
+
 export default api
