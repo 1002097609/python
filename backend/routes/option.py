@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from ..database import get_db
 from ..models.option import Option
+from ..models.tag import Tag
 from ..schemas.option import OptionCreate, OptionUpdate, OptionResponse
 
 # 创建新版选项数据专用路由器
@@ -106,6 +107,16 @@ def create_option(data: OptionCreate, db: Session = Depends(get_db)):
     """
     item = Option(**data.model_dump())
     db.add(item)
+    db.flush()
+
+    # 同步到 tag 表：如果 group_key 对应可同步的类型
+    if item.group_key in ("category", "platform", "style", "strategy"):
+        existing_tag = db.query(Tag).filter(
+            Tag.name == item.value, Tag.type == item.group_key
+        ).first()
+        if not existing_tag:
+            db.add(Tag(name=item.value, type=item.group_key))
+
     db.commit()
     db.refresh(item)
     return item
@@ -132,9 +143,26 @@ def update_option(option_id: int, data: OptionUpdate, db: Session = Depends(get_
     if not item:
         raise HTTPException(status_code=404, detail="选项不存在")
 
+    # 记录变更前的值，用于同步 tag 表
+    old_value = item.value
+    old_group_key = item.group_key
+
     # exclude_unset=True 确保只有调用方实际传入的字段才会被更新
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(item, key, value)
+
+    # 同步到 tag 表：如果 group_key 属于可同步类型
+    if item.group_key in ("category", "platform", "style", "strategy"):
+        tag = db.query(Tag).filter(
+            Tag.name == old_value, Tag.type == old_group_key
+        ).first()
+        if tag:
+            tag.name = item.value
+            tag.type = item.group_key
+        else:
+            # 如果 tag 不存在，创建一个新的
+            db.add(Tag(name=item.value, type=item.group_key))
 
     db.commit()
     db.refresh(item)
@@ -158,5 +186,12 @@ def delete_option(option_id: int, db: Session = Depends(get_db)):
     item = db.query(Option).filter(Option.id == option_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="选项不存在")
+
+    # 同步删除 tag 表中对应的记录
+    if item.group_key in ("category", "platform", "style", "strategy"):
+        db.query(Tag).filter(
+            Tag.name == item.value, Tag.type == item.group_key
+        ).delete()
+
     db.delete(item)
     db.commit()

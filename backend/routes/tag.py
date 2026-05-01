@@ -26,6 +26,7 @@ from typing import Optional
 from ..database import get_db
 from ..models.tag import Tag, MaterialTag
 from ..models.material import Material
+from ..models.option import Option
 
 # 创建标签管理专用路由器
 router = APIRouter()
@@ -84,6 +85,86 @@ class MaterialTagCreate(BaseModel):
         tag_id (int): 要关联的标签 ID。
     """
     tag_id: int
+
+
+# ============================================================
+# Tag ↔ Option 同步辅助函数
+# ============================================================
+
+# tag.type 到 option.group_key 的映射关系
+# tag 的 type 值与 option 的 group_key 完全一致：
+#   "category" -> option group_key="category"
+#   "platform" -> option group_key="platform"
+#   "style"    -> option group_key="style"
+#   "strategy" -> option group_key="strategy"
+SYNC_TYPES = {"category", "platform", "style", "strategy"}
+
+
+def _sync_tag_to_option(db: Session, tag: Tag, old_name: str = None, old_type: str = None):
+    """
+    将标签变更同步到 option 表。
+
+    逻辑：
+    - 如果 tag.type 不在 SYNC_TYPES 中，不做任何操作
+    - 如果 old_type 存在且与当前 type 不同（类型变更）：
+      删除旧 type 分组下对应的 option 记录
+    - 在 tag.type 对应的 option group_key 下，用 tag.name 做 upsert：
+      存在 (group_key=tag.type, value=old_name或tag.name) 则更新 label
+      不存在则插入新记录
+
+    参数：
+        db:      数据库会话
+        tag:     当前 tag 对象（已包含最新 name 和 type）
+        old_name: 变更前的标签名称（用于定位旧 option 记录）
+        old_type: 变更前的标签类型（用于处理类型变更时的旧 option 清理）
+    """
+    # 如果旧类型存在且发生了变化，先清理旧类型对应的 option 记录
+    if old_type and old_type != tag.type and old_type in SYNC_TYPES:
+        db.query(Option).filter(
+            Option.group_key == old_type,
+            Option.value == old_name,
+        ).delete()
+
+    # 如果当前类型需要同步到 option 表
+    if tag.type in SYNC_TYPES:
+        # 确定查找条件：优先用 old_name（更新场景），否则用当前 name
+        lookup_value = old_name if old_name and old_name != tag.name else tag.name
+
+        # 查找对应的 option 记录
+        opt = (
+            db.query(Option)
+            .filter(Option.group_key == tag.type, Option.value == lookup_value)
+            .first()
+        )
+
+        if opt:
+            # 已存在：更新 label 和 value
+            opt.label = tag.name
+            opt.value = tag.name
+        else:
+            # 不存在：插入新记录
+            db.add(Option(
+                group_key=tag.type,
+                label=tag.name,
+                value=tag.name,
+                sort_order=0,
+                is_active=1,
+            ))
+
+
+def _remove_tag_option(db: Session, tag: Tag):
+    """
+    删除 tag 时，同步删除 option 表中对应的记录。
+
+    参数：
+        db:  数据库会话
+        tag:  要被删除的 tag 对象
+    """
+    if tag.type in SYNC_TYPES:
+        db.query(Option).filter(
+            Option.group_key == tag.type,
+            Option.value == tag.name,
+        ).delete()
 
 
 # ============================================================
@@ -158,6 +239,10 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
 
     tag = Tag(name=data.name, type=data.type)
     db.add(tag)
+    db.flush()  # 获取 ID 后再同步 option
+
+    # 同步到 option 表
+    _sync_tag_to_option(db, tag)
     db.commit()
     db.refresh(tag)
     return tag
@@ -182,9 +267,18 @@ def update_tag(tag_id: int, data: TagUpdate, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="标签不存在")
 
+    # 记录变更前的值，用于同步 option 表
+    old_name = item.name
+    old_type = item.type
+
     # 仅更新传入的字段
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(item, key, value)
+
+    # 同步到 option 表（name 或 type 变更时才需要）
+    if "name" in update_data or "type" in update_data:
+        _sync_tag_to_option(db, item, old_name=old_name, old_type=old_type)
 
     db.commit()
     db.refresh(item)
@@ -210,6 +304,9 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     item = db.query(Tag).filter(Tag.id == tag_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="标签不存在")
+
+    # 同步删除 option 表中对应的记录
+    _remove_tag_option(db, item)
 
     # 级联删除关联表中的记录
     db.query(MaterialTag).filter(MaterialTag.tag_id == tag_id).delete()
