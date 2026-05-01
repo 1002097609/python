@@ -17,7 +17,7 @@
           {{ tab.icon }} {{ tab.label }}
         </router-link>
         <el-dropdown trigger="click" class="nav-dropdown">
-          <span class="nav-tab">更多 ▾</span>
+          <span class="nav-tab" :class="{ active: isMoreActive }">更多 ▾</span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item>
@@ -43,6 +43,11 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
 const tabs = [
   { path: '/dashboard', label: '数据统计', icon: '📊' },
   { path: '/', label: '素材拆解', icon: '🔍' },
@@ -50,6 +55,9 @@ const tabs = [
   { path: '/fission', label: '素材裂变', icon: '⚡' },
   { path: '/skeleton-lib', label: '骨架库', icon: '🦴' },
 ]
+
+const moreDropdownPaths = ['/tag-manage', '/fission-records', '/option-manage']
+const isMoreActive = computed(() => moreDropdownPaths.includes(route.path))
 </script>
 
 <style>

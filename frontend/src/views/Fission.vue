@@ -12,13 +12,23 @@
         <div class="step-content">
           <div class="step-title">选择骨架</div>
           <div class="step-desc">选择一个已提取的骨架作为裂变模板</div>
+          <!-- 骨架筛选栏 -->
+          <div class="skeleton-filter-bar">
+            <el-select v-model="skeletonPlatformFilter" placeholder="全部平台" clearable style="width:140px" size="large" @change="fetchSkeletons">
+              <el-option v-for="p in skeletonPlatforms" :key="p" :label="p" :value="p" />
+            </el-select>
+            <el-select v-model="skeletonTypeFilter" placeholder="全部类型" clearable style="width:140px" size="large" @change="fetchSkeletons">
+              <el-option v-for="t in skeletonTypes" :key="t" :label="t" :value="t" />
+            </el-select>
+          </div>
           <el-select
             v-model="selectedSkeleton"
             placeholder="🔍 选择骨架"
             @change="onSkeletonChange"
-            style="width:100%; margin-top:12px"
+            style="width:100%; margin-top:8px"
             size="large"
             :loading="loadingOptions"
+            filterable
           >
             <el-option
               v-for="sk in skeletons"
@@ -29,6 +39,7 @@
               <div class="skeleton-option">
                 <span class="sk-name">{{ sk.name }}</span>
                 <span class="sk-meta">
+                  <el-tag size="small" type="primary" effect="plain" v-if="sk.platform">{{ sk.platform }}</el-tag>
                   {{ sk.skeleton_type }} · 使用{{ sk.usage_count || 0 }}次
                   <template v-if="sk.avg_roi"> · ROI {{ Number(sk.avg_roi).toFixed(1) }}x</template>
                   <template v-if="sk.avg_ctr"> · CTR {{ Number(sk.avg_ctr).toFixed(1) }}%</template>
@@ -229,6 +240,8 @@ const loadingOptions = ref(false)
 const loadingSkeleton = ref(false)
 const skeletons = ref([])
 const selectedSkeleton = ref(null)
+const skeletonPlatformFilter = ref('')
+const skeletonTypeFilter = ref('')
 const fissionMode = ref('replace_leaf')
 const fissionResult = ref(null)
 
@@ -285,6 +298,16 @@ const selectedSkeletonName = computed(() => {
   return sk ? sk.name : ''
 })
 
+// 骨架筛选选项（从已加载骨架中提取）
+const skeletonPlatforms = computed(() => {
+  const set = new Set(skeletons.value.map(s => s.platform).filter(Boolean))
+  return [...set]
+})
+const skeletonTypes = computed(() => {
+  const set = new Set(skeletons.value.map(s => s.skeleton_type).filter(Boolean))
+  return [...set]
+})
+
 // 解析裂变结果为结构化段落
 const parsedResult = computed(() => {
   if (!fissionResult.value?.output_content) return []
@@ -305,8 +328,11 @@ const fetchOptions = async () => {
 const fetchSkeletons = async () => {
   loadingSkeleton.value = true
   try {
-    const { data } = await api.get('/skeleton/')
-    skeletons.value = data
+    const params = {}
+    if (skeletonPlatformFilter.value) params.platform = skeletonPlatformFilter.value
+    if (skeletonTypeFilter.value) params.skeleton_type = skeletonTypeFilter.value
+    const { data } = await api.get('/skeleton/', { params })
+    skeletons.value = Array.isArray(data) ? data : (data.items || data)
   } catch (e) {
     console.error('加载骨架失败', e)
   }
@@ -466,9 +492,10 @@ onMounted(() => {
 .step-empty { margin-top: 12px; padding: 16px; background: #fff8e6; border-radius: 8px; font-size: 13px; color: #e6a700; text-align: center; }
 
 /* Skeleton option in dropdown */
+.skeleton-filter-bar { display: flex; gap: 8px; margin-top: 12px; }
 .skeleton-option { display: flex; flex-direction: column; gap: 2px; }
 .sk-name { font-size: 14px; color: #333; }
-.sk-meta { font-size: 12px; color: #999; }
+.sk-meta { font-size: 12px; color: #999; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 .divider { height: 1px; background: #f0f0f0; margin: 24px 0; }
 

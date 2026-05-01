@@ -329,20 +329,40 @@ const goFissionFromDetail = () => {
   goFission(currentSkeleton.value)
 }
 
-const handleDelete = (sk) => {
-  ElMessageBox.confirm(`确认删除骨架「${sk.name}」？删除后不可恢复。`, '警告', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-  }).then(async () => {
-    try {
-      await api.delete(`/skeleton/${sk.id}`)
-      ElMessage.success('删除成功')
-      await Promise.all([fetchSkeletons(), fetchAllSkeletons()])
-    } catch (e) {
-      ElMessage.error('删除失败')
-    }
-  }).catch(() => {})
+const handleDelete = async (sk) => {
+  // 先查询关联的裂变记录数量
+  let fissionCount = 0
+  try {
+    const { data } = await api.get('/fission/', { params: { skeleton_id: sk.id, page_size: 1 } })
+    fissionCount = Array.isArray(data) ? data.length : (data.total || 0)
+  } catch (e) {
+    // 查询失败时不阻塞删除
+  }
+
+  let message = `确认删除骨架「${sk.name}」？`
+  if (fissionCount > 0) {
+    message += `<br/><span style="color:#e74c3c;font-weight:600">⚠️ 这将同时级联删除 ${fissionCount} 条裂变记录及其效果数据！</span>`
+  }
+  message += '<br/>删除后不可恢复。'
+
+  try {
+    await ElMessageBox.confirm(message, '警告', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      dangerouslyUseHTMLString: true,
+    })
+  } catch {
+    return  // 用户取消
+  }
+
+  try {
+    await api.delete(`/skeleton/${sk.id}`)
+    ElMessage.success('删除成功')
+    await Promise.all([fetchSkeletons(), fetchAllSkeletons()])
+  } catch (e) {
+    ElMessage.error('删除失败')
+  }
 }
 
 // 筛选条件变化时重置到第一页

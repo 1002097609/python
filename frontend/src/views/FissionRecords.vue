@@ -10,29 +10,29 @@
       <div class="stat-card stat-total">
         <div class="stat-icon">📋</div>
         <div class="stat-info">
-          <div class="stat-num">{{ records.length }}</div>
+          <div class="stat-num">{{ totalCount }}</div>
           <div class="stat-label">裂变总数</div>
         </div>
       </div>
       <div class="stat-card stat-pending">
         <div class="stat-icon">📝</div>
         <div class="stat-info">
-          <div class="stat-num">{{ draftCount }}</div>
-          <div class="stat-label">{{ statusLabel(0) }}</div>
+          <div class="stat-num">{{ draftCount }}<span v-if="hasMorePages" class="stat-page-hint">/页</span></div>
+          <div class="stat-label">{{ statusLabel(0) }}<span v-if="hasMorePages" class="stat-page-hint">（当前页）</span></div>
         </div>
       </div>
       <div class="stat-card stat-running">
         <div class="stat-icon">🚀</div>
         <div class="stat-info">
-          <div class="stat-num">{{ runningCount }}</div>
-          <div class="stat-label">{{ statusLabel(3) }}</div>
+          <div class="stat-num">{{ runningCount }}<span v-if="hasMorePages" class="stat-page-hint">/页</span></div>
+          <div class="stat-label">{{ statusLabel(3) }}<span v-if="hasMorePages" class="stat-page-hint">（当前页）</span></div>
         </div>
       </div>
       <div class="stat-card stat-done">
         <div class="stat-icon">✅</div>
         <div class="stat-info">
-          <div class="stat-num">{{ hasEffectCount }}</div>
-          <div class="stat-label">已回写效果</div>
+          <div class="stat-num">{{ hasEffectCount }}<span v-if="hasMorePages" class="stat-page-hint">/页</span></div>
+          <div class="stat-label">已回写效果<span v-if="hasMorePages" class="stat-page-hint">（当前页）</span></div>
         </div>
       </div>
     </div>
@@ -210,6 +210,7 @@
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="primary" @click="saveAsMaterial" :loading="savingMaterial">📚 存为素材</el-button>
         <el-button type="success" @click="openEffectForDetail">录入效果数据</el-button>
       </template>
     </el-dialog>
@@ -320,6 +321,7 @@ let effectChart = null
 const effectDialogVisible = ref(false)
 const effectFissionId = ref(null)
 const submitting = ref(false)
+const savingMaterial = ref(false)
 const effectFormRef = ref(null)
 
 // 动态选项（从数据库加载）
@@ -379,11 +381,14 @@ const skeletonOptions = computed(() => {
 })
 
 // ============================================================
-// 统计数据（基于当前页数据，精确统计需后端接口）
+// 统计数据（基于当前页数据；总数需翻页查看或等待后端聚合接口）
 // ============================================================
 const draftCount = computed(() => records.value.filter(r => r.output_status === 0).length)
 const runningCount = computed(() => records.value.filter(r => r.output_status === 3).length)
 const hasEffectCount = computed(() => records.value.filter(r => r.actual_roi).length)
+
+// 标记是否有更多数据（用于提示用户当前统计仅为当前页）
+const hasMorePages = computed(() => totalCount.value > pageSize.value)
 
 // ============================================================
 // 工具函数
@@ -550,6 +555,40 @@ const openEffectForDetail = () => {
   openEffectDialog(currentRecord.value)
 }
 
+// ============================================================
+// 操作：将裂变产出存为素材（飞轮闭环）
+// ============================================================
+const saveAsMaterial = async () => {
+  if (!currentRecord.value) return
+  try {
+    await ElMessageBox.confirm(
+      `将「${currentRecord.value.output_title}」保存为素材？保存后可立即进行拆解。`,
+      '存为素材',
+      { confirmButtonText: '保存', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch {
+    return
+  }
+  savingMaterial.value = true
+  try {
+    const { data } = await api.post('/material/', {
+      title: currentRecord.value.output_title,
+      content: currentRecord.value.output_content || '',
+      platform: currentRecord.value.new_platform || '',
+      category: currentRecord.value.new_category || '',
+    })
+    detailVisible.value = false
+    ElMessage.success('已保存为素材，正在跳转到拆解页面...')
+    // 短暂延迟后跳转，让用户看到成功提示
+    setTimeout(() => {
+      router.push({ path: '/', query: { material_id: data.id } })
+    }, 800)
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e.response?.data?.detail || e.message))
+  }
+  savingMaterial.value = false
+}
+
 const submitEffect = async () => {
   const valid = await effectFormRef.value.validate().catch(() => false)
   if (!valid) return
@@ -635,6 +674,7 @@ onMounted(() => {
 .stat-icon { font-size: 28px; }
 .stat-num { font-size: 24px; font-weight: 700; color: #1a1a2e; }
 .stat-label { font-size: 12px; color: #999; margin-top: 2px; }
+.stat-page-hint { font-size: 11px; color: #bbb; margin-left: 2px; }
 
 .card { background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,.06); padding: 24px; }
 .card-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }

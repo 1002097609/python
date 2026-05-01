@@ -61,6 +61,14 @@
       </div>
 
       <el-table :data="materials" stripe style="width:100%" @selection-change="onSelectionChange" ref="tableRef">
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="row-expand-content">
+              <div class="expand-label">素材内容：</div>
+              <div class="expand-text">{{ row.content || '（无内容）' }}</div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column type="selection" width="42" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
@@ -218,8 +226,9 @@ const fetchOptions = async () => {
 }
 
 const platforms = computed(() => {
-  const set = new Set(materials.value.map(m => m.platform).filter(Boolean))
-  return [...set]
+  // 从选项表加载完整平台列表，确保筛选不受当前页数据限制
+  const opts = options.value.platform || []
+  return opts.map(o => o.value || o.label).filter(Boolean)
 })
 
 const pendingCount = computed(() => materials.value.filter(m => m.status === 0).length)
@@ -440,6 +449,11 @@ onMounted(() => {
 }
 .batch-hint { font-size: 13px; color: #667eea; font-weight: 500; }
 .batch-actions { display: flex; align-items: center; gap: 8px; }
+
+/* 行展开内容 */
+.row-expand-content { padding: 12px 16px; background: #f8f9fa; }
+.expand-label { font-size: 13px; color: #999; margin-bottom: 6px; }
+.expand-text { font-size: 13px; color: #555; line-height: 1.8; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
 
 /* 分页 */
 .pagination-wrap { display: flex; justify-content: flex-end; margin-top: 20px; }
