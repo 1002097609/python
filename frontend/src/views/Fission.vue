@@ -101,13 +101,15 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="金句">
-                  <el-select v-model="fissionForm.replacement.L5.golden_sentences" multiple allow-create filterable placeholder="输入金句后回车" style="width:100%">
+                  <el-select v-model="fissionForm.replacement.L5.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句" style="width:100%">
+                    <el-option v-for="opt in options.golden_sentences" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="数据">
-              <el-select v-model="fissionForm.replacement.L5.data_refs" multiple allow-create filterable placeholder="输入数据后回车" style="width:100%">
+              <el-select v-model="fissionForm.replacement.L5.data_refs" multiple allow-create filterable placeholder="选择或输入数据" style="width:100%">
+                <el-option v-for="opt in options.data_refs" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item>

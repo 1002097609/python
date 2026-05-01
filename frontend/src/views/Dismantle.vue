@@ -156,15 +156,18 @@
           </div>
           <div class="layer-body">
             <el-form-item label="金句">
-              <el-select v-model="dismantleForm.l5_expressions.golden_sentences" multiple allow-create filterable placeholder="输入金句后回车" style="width:100%">
+              <el-select v-model="dismantleForm.l5_expressions.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句" style="width:100%">
+                <el-option v-for="opt in options.golden_sentences" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="数据">
-              <el-select v-model="dismantleForm.l5_expressions.data_refs" multiple allow-create filterable placeholder="输入数据后回车" style="width:100%">
+              <el-select v-model="dismantleForm.l5_expressions.data_refs" multiple allow-create filterable placeholder="选择或输入数据" style="width:100%">
+                <el-option v-for="opt in options.data_refs" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="视觉">
-              <el-select v-model="dismantleForm.l5_expressions.visual_desc" multiple allow-create filterable placeholder="输入视觉描述后回车" style="width:100%">
+              <el-select v-model="dismantleForm.l5_expressions.visual_desc" multiple allow-create filterable placeholder="选择或输入视觉描述" style="width:100%">
+                <el-option v-for="opt in options.visual_descs" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </div>
