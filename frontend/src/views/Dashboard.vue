@@ -1,8 +1,23 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <h2>📊 数据统计</h2>
-      <p class="page-desc">系统运营数据概览 — 素材、骨架、裂变、效果全链路监控</p>
+      <div class="page-header-left">
+        <h2>📊 数据统计</h2>
+        <p class="page-desc">系统运营数据概览 — 素材、骨架、裂变、效果全链路监控</p>
+      </div>
+      <div class="page-header-right">
+        <el-button type="primary" link @click="fetchAll" :loading="refreshing" title="刷新数据">
+          🔄 刷新
+        </el-button>
+        <el-tooltip content="自动刷新间隔" placement="bottom">
+          <el-select v-model="refreshInterval" style="width:100px" size="small" @change="restartAutoRefresh">
+            <el-option label="关闭" :value="0" />
+            <el-option label="30秒" :value="30" />
+            <el-option label="60秒" :value="60" />
+            <el-option label="5分钟" :value="300" />
+          </el-select>
+        </el-tooltip>
+      </div>
     </div>
 
     <!-- 概览卡片 -->
@@ -146,6 +161,25 @@ const trendChartRef = ref(null)
 let categoryChart = null
 let fissionChart = null
 let trendChart = null
+
+// ============================================================
+// 自动刷新
+// ============================================================
+const refreshInterval = ref(60)  // 默认 60 秒
+const refreshing = ref(false)
+let refreshTimer = null
+
+const restartAutoRefresh = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+  if (refreshInterval.value > 0) {
+    refreshTimer = setInterval(() => {
+      fetchAll()
+    }, refreshInterval.value * 1000)
+  }
+}
 
 // ============================================================
 // 工具函数
@@ -317,6 +351,7 @@ function resizeCharts() {
 
 onMounted(async () => {
   await fetchAll()
+  restartAutoRefresh()
   await nextTick()
   initCategoryChart()
   initFissionChart()
@@ -325,6 +360,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
   window.removeEventListener('resize', resizeCharts)
   categoryChart?.dispose()
   fissionChart?.dispose()

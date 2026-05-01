@@ -51,6 +51,7 @@ def _skeleton_to_dict(s: Skeleton) -> dict:
 def list_skeletons(
     platform: Optional[str] = Query(None),
     skeleton_type: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None, description="按名称/描述关键词搜索"),
     sort_by: str = Query("usage_count", pattern="^(usage_count|avg_roi|avg_ctr|created_at)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -78,6 +79,8 @@ def list_skeletons(
         query = query.filter(Skeleton.platform == platform)
     if skeleton_type:
         query = query.filter(Skeleton.skeleton_type == skeleton_type)
+    if keyword:
+        query = query.filter(Skeleton.name.contains(keyword) | Skeleton.strategy_desc.contains(keyword))
 
     # 根据传入的排序字段动态获取 ORM 列属性，默认使用 usage_count
     sort_column = getattr(Skeleton, sort_by, Skeleton.usage_count)

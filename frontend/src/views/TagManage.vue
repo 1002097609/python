@@ -60,11 +60,23 @@
           <template v-if="editingId === tag.id">
             <div class="tag-edit-row">
               <el-input v-model="editForm.name" size="small" style="width:120px" @keyup.enter="handleSaveEdit(tag)" />
-              <el-select v-model="editForm.type" size="small" style="width:130px">
+              <el-select v-model="editForm.type" size="small" style="width:110px">
                 <el-option label="platform" value="platform" />
                 <el-option label="category" value="category" />
                 <el-option label="style" value="style" />
                 <el-option label="strategy" value="strategy" />
+              </el-select>
+              <el-select
+                v-model="editForm.option_id"
+                placeholder="关联选项"
+                clearable
+                filterable
+                size="small"
+                style="width:160px"
+              >
+                <el-option-group v-for="group in optionGroupsForEdit(editForm.type)" :key="group.groupKey" :label="group.label">
+                  <el-option v-for="opt in group.options" :key="opt.id" :label="opt.label" :value="opt.id" />
+                </el-option-group>
               </el-select>
               <el-button type="success" size="small" link @click="handleSaveEdit(tag)">保存</el-button>
               <el-button type="info" size="small" link @click="cancelEdit">取消</el-button>
@@ -114,6 +126,7 @@ const newTag = reactive({
 const editForm = reactive({
   name: '',
   type: '',
+  option_id: null,
 })
 
 const tagSections = computed(() => {
@@ -224,12 +237,24 @@ const openEdit = (tag) => {
   editingId.value = tag.id
   editForm.name = tag.name
   editForm.type = tag.type
+  editForm.option_id = tag.option_id || null
 }
 
 const cancelEdit = () => {
   editingId.value = null
   editForm.name = ''
   editForm.type = ''
+  editForm.option_id = null
+}
+
+// 编辑时按当前类型过滤 option 分组
+const optionGroupsForEdit = (type) => {
+  if (!type) return []
+  const groupMap = { platform: '平台', category: '品类', style: '风格', strategy: '策略' }
+  const label = groupMap[type] || type
+  const group = optionGroups.value.find(g => g.groupKey === type)
+  if (!group || !group.options.length) return []
+  return [{ groupKey: type, label, options: group.options }]
 }
 
 const handleSaveEdit = async (tag) => {
@@ -242,12 +267,17 @@ const handleSaveEdit = async (tag) => {
     return
   }
   try {
-    const updated = await updateTag(tag.id, {
+    const payload = {
       name: editForm.name.trim(),
       type: editForm.type,
-    })
+    }
+    if (editForm.option_id) {
+      payload.option_id = editForm.option_id
+    }
+    const updated = await updateTag(tag.id, payload)
     tag.name = updated.name
     tag.type = updated.type
+    tag.option_id = updated.option_id || null
     ElMessage.success('标签更新成功')
     editingId.value = null
   } catch (e) {

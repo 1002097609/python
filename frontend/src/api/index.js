@@ -72,6 +72,44 @@ export async function getFissionDetail(fissionId) {
 }
 
 // ============================================================
+// 拆解
+// ============================================================
+
+// 查询素材的拆解记录
+export async function getDismantleByMaterial(materialId) {
+  const { data } = await api.get(`/dismantle/by-material/${materialId}`)
+  return data
+}
+
+// 查询拆解详情
+export async function getDismantle(dismantleId) {
+  const { data } = await api.get(`/dismantle/${dismantleId}`)
+  return data
+}
+
+// 创建拆解记录
+export async function createDismantle(payload) {
+  const { data } = await api.post('/dismantle/', payload)
+  return data
+}
+
+// 更新拆解记录
+export async function updateDismantle(dismantleId, payload) {
+  const { data } = await api.put(`/dismantle/${dismantleId}`, payload)
+  return data
+}
+
+// ============================================================
+// 裂变记录状态
+// ============================================================
+
+// 更新裂变记录状态（状态流转：0草稿→1待审核→2已采用→3已投放）
+export async function updateFissionStatus(fissionId, status) {
+  const { data } = await api.put(`/fission/${fissionId}/status`, null, { params: { status } })
+  return data
+}
+
+// ============================================================
 // 标签
 // ============================================================
 

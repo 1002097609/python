@@ -321,17 +321,29 @@ onMounted(async () => {
   const materialId = route.query.material_id
   if (materialId) {
     const id = Number(materialId)
-    currentMaterial.value = {
-      id,
-      title: route.query.title || '',
-      platform: route.query.platform || '',
-      category: route.query.category || '',
-    }
-    materialForm.title = route.query.title || ''
-    materialForm.platform = route.query.platform || ''
-    materialForm.category = route.query.category || ''
-    materialForm.content = route.query.content || ''
     dismantleForm.material_id = id
+
+    // 优先通过 API 获取完整素材信息（避免 URL 参数截断）
+    try {
+      const { data } = await api.get(`/material/${id}`)
+      currentMaterial.value = data
+      materialForm.title = data.title || ''
+      materialForm.platform = data.platform || ''
+      materialForm.category = data.category || ''
+      materialForm.content = data.content || ''
+    } catch (e) {
+      // API 失败时回退到 URL 参数
+      currentMaterial.value = {
+        id,
+        title: route.query.title || '',
+        platform: route.query.platform || '',
+        category: route.query.category || '',
+      }
+      materialForm.title = route.query.title || ''
+      materialForm.platform = route.query.platform || ''
+      materialForm.category = route.query.category || ''
+      materialForm.content = route.query.content || ''
+    }
 
     // 检查是否已有拆解记录
     await fetchExistingDismantle(id)

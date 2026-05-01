@@ -540,6 +540,56 @@ def list_fissions(
     return {"items": result, "total": total, "page": page, "page_size": page_size}
 
 
+@router.put("/{fission_id}/status")
+def update_fission_status(fission_id: int, status: int, db: Session = Depends(get_db)):
+    """
+    更新裂变记录的状态，支持状态流转：
+      0=草稿 → 1=待审核 → 2=已采用 → 3=已投放
+
+    状态流转规则：
+      - 只能向前推进（不能回退）
+      - 每次只能推进一个状态（不能跳跃）
+      - 已投放（3）为终态，不可再变更
+
+    请求参数：
+        fission_id (int): 裂变记录 ID
+        status (int):     目标状态值（0-3）
+
+    返回值：
+        dict: 操作结果描述
+
+    异常：
+        HTTP 400: 当状态流转不合法时抛出
+        HTTP 404: 当裂变记录不存在时抛出
+    """
+    item = db.query(Fission).filter(Fission.id == fission_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="裂变记录不存在")
+
+    current = item.output_status
+
+    # 校验目标状态合法性
+    if status not in (0, 1, 2, 3):
+        raise HTTPException(status_code=400, detail="无效的状态值，必须为 0-3")
+    if status == current:
+        raise HTTPException(status_code=400, detail="状态未变化")
+    if status < current:
+        raise HTTPException(status_code=400, detail="状态不能回退")
+    if status - current != 1:
+        raise HTTPException(status_code=400, detail="每次只能推进一个状态")
+
+    item.output_status = status
+    db.commit()
+    db.refresh(item)
+
+    status_names = {0: "草稿", 1: "待审核", 2: "已采用", 3: "已投放"}
+    return {
+        "id": item.id,
+        "output_status": item.output_status,
+        "message": f"状态已更新为「{status_names[status]}」",
+    }
+
+
 @router.delete("/{fission_id}")
 def delete_fission(fission_id: int, db: Session = Depends(get_db)):
     """

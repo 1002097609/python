@@ -95,9 +95,12 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button v-if="row.output_status < 3" type="warning" link size="small" @click="advanceStatus(row)">
+              {{ nextStatusLabel(row.output_status) }}
+            </el-button>
             <el-button type="success" link size="small" @click="openEffectDialog(row)">录入效果</el-button>
             <el-button type="danger" link size="small" @click="deleteRecord(row)">删除</el-button>
           </template>
@@ -178,7 +181,10 @@
         <!-- 效果数据趋势 -->
         <div class="detail-section" v-if="currentRecord.effects && currentRecord.effects.length > 0">
           <div class="section-title">📈 效果数据趋势</div>
-          <el-table :data="currentRecord.effects" size="small" stripe>
+          <!-- 趋势折线图 -->
+          <div ref="effectChartRef" class="effect-chart"></div>
+          <!-- 数据表格 -->
+          <el-table :data="currentRecord.effects" size="small" stripe style="margin-top:12px">
             <el-table-column prop="stat_date" label="日期" width="120" />
             <el-table-column prop="platform" label="平台" width="90" />
             <el-table-column prop="impressions" label="曝光" width="90" />
@@ -291,9 +297,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, getOptions } from '../api'
+import * as echarts from 'echarts'
+import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, getOptions, updateFissionStatus } from '../api'
 
 // ============================================================
 // 数据状态
@@ -308,6 +315,8 @@ const pageSize = ref(20)
 const totalCount = ref(0)
 const detailVisible = ref(false)
 const currentRecord = ref(null)
+const effectChartRef = ref(null)
+let effectChart = null
 const effectDialogVisible = ref(false)
 const effectFissionId = ref(null)
 const submitting = ref(false)
@@ -387,6 +396,10 @@ const statusType = (s) => {
   const types = { 0: 'info', 1: 'warning', 2: 'success', 3: 'primary' }
   return types[s] || 'info'
 }
+const nextStatusLabel = (currentStatus) => {
+  const labels = { 0: '提交审核', 1: '审核通过', 2: '标记已投放' }
+  return labels[currentStatus] || ''
+}
 const modeLabel = (m) => {
   const opt = (options.value.fission_mode || []).find(o => o.value === m)
   if (!opt) return m
@@ -430,6 +443,14 @@ watch([filterStatus, filterSkeleton], () => {
   page.value = 1
 })
 
+// 详情弹窗关闭时清理图表
+watch(detailVisible, (val) => {
+  if (!val && effectChart) {
+    effectChart.dispose()
+    effectChart = null
+  }
+})
+
 const fetchSkeletons = async () => {
   try {
     const { data } = await api.get('/skeleton/')
@@ -447,9 +468,60 @@ const viewDetail = async (row) => {
     const data = await getFissionDetail(row.id)
     currentRecord.value = data
     detailVisible.value = true
+    // 等 DOM 渲染完成后初始化图表
+    await nextTick()
+    initEffectChart()
   } catch (e) {
     ElMessage.error('加载详情失败')
   }
+}
+
+// ============================================================
+// 效果趋势图表
+// ============================================================
+function initEffectChart() {
+  if (!effectChartRef.value) return
+  if (effectChart) {
+    effectChart.dispose()
+    effectChart = null
+  }
+  const effects = currentRecord.value?.effects || []
+  if (effects.length === 0) return
+
+  effectChart = echarts.init(effectChartRef.value)
+  const dates = effects.map(e => e.stat_date)
+  const roiData = effects.map(e => e.roi)
+  const ctrData = effects.map(e => e.ctr)
+
+  effectChart.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['ROI', 'CTR'], top: 0 },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '36px', containLabel: true },
+    xAxis: { type: 'category', data: dates, axisLabel: { rotate: 30 } },
+    yAxis: [
+      { type: 'value', name: 'ROI (x)', position: 'left' },
+      { type: 'value', name: 'CTR (%)', position: 'right' },
+    ],
+    series: [
+      {
+        name: 'ROI',
+        type: 'line',
+        smooth: true,
+        data: roiData,
+        itemStyle: { color: '#43e97b' },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(67,233,123,.3)' }, { offset: 1, color: 'rgba(67,233,123,.02)' }] } },
+      },
+      {
+        name: 'CTR',
+        type: 'line',
+        smooth: true,
+        yAxisIndex: 1,
+        data: ctrData,
+        itemStyle: { color: '#667eea' },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(102,126,234,.3)' }, { offset: 1, color: 'rgba(102,126,234,.02)' }] } },
+      },
+    ],
+  })
 }
 
 // ============================================================
@@ -512,6 +584,27 @@ const deleteRecord = (row) => {
       await fetchRecords()
     } catch (e) {
       ElMessage.error('删除失败')
+    }
+  }).catch(() => {})
+}
+
+// ============================================================
+// 操作：状态流转
+// ============================================================
+const advanceStatus = (row) => {
+  const nextLabel = nextStatusLabel(row.output_status)
+  ElMessageBox.confirm(
+    `确认将「${row.output_title}」推进到「${nextLabel}」？`,
+    '状态流转',
+    { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' },
+  ).then(async () => {
+    try {
+      const newStatus = row.output_status + 1
+      await updateFissionStatus(row.id, newStatus)
+      ElMessage.success(`已推进到「${nextLabel}」`)
+      row.output_status = newStatus
+    } catch (e) {
+      ElMessage.error(e.response?.data?.detail || '操作失败')
     }
   }).catch(() => {})
 }
@@ -581,6 +674,9 @@ onMounted(() => {
 .compare-value.ok { color: #27ae60; }
 .compare-arrow { font-size: 20px; color: #ccc; flex-shrink: 0; }
 .compare-empty { font-size: 13px; color: #bbb; text-align: center; padding: 10px 0; }
+
+/* 效果趋势图 */
+.effect-chart { width: 100%; height: 240px; }
 
 /* 产出内容 */
 .output-content {

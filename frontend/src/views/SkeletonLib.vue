@@ -44,6 +44,7 @@
           <el-select v-model="filterType" placeholder="类型" clearable style="width:140px">
             <el-option v-for="t in skeletonTypes" :key="t" :label="t" :value="t" />
           </el-select>
+          <el-input v-model="searchKeyword" placeholder="搜索骨架..." clearable style="width:180px" />
           <el-select v-model="sortBy" placeholder="排序" style="width:130px">
             <el-option label="使用次数" value="usage_count" />
             <el-option label="平均 ROI" value="avg_roi" />
@@ -225,6 +226,7 @@ const loading = ref(false)
 const filterType = ref('')
 const filterPlatform = ref('')
 const sortBy = ref('usage_count')
+const searchKeyword = ref('')
 const page = ref(1)
 const pageSize = ref(12)
 const totalCount = ref(0)
@@ -289,6 +291,7 @@ const fetchSkeletons = async () => {
     }
     if (filterType.value) params.skeleton_type = filterType.value
     if (filterPlatform.value) params.platform = filterPlatform.value
+    if (searchKeyword.value) params.keyword = searchKeyword.value
     const { data } = await api.get('/skeleton/', { params })
     // 兼容旧格式（纯数组）和新格式（分页对象）
     if (Array.isArray(data)) {
@@ -343,7 +346,7 @@ const handleDelete = (sk) => {
 }
 
 // 筛选条件变化时重置到第一页
-watch([filterType, filterPlatform, sortBy], () => {
+watch([filterType, filterPlatform, sortBy, searchKeyword], () => {
   page.value = 1
 })
 

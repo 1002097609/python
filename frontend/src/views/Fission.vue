@@ -338,10 +338,26 @@ const executeFission = async () => {
   loading.value = false
 }
 
-const copyResult = () => {
-  if (fissionResult.value?.output_content) {
-    navigator.clipboard.writeText(fissionResult.value.output_content)
+const copyResult = async () => {
+  if (!fissionResult.value?.output_content) return
+  const text = fissionResult.value.output_content
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // 降级方案：使用 textarea + execCommand
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
     ElMessage.success('已复制到剪贴板')
+  } catch (e) {
+    ElMessage.error('复制失败，请手动选择文本复制')
   }
 }
 
