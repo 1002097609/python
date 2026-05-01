@@ -77,45 +77,91 @@
           <div class="step-title">填写替换内容</div>
           <div class="step-desc">输入新主题、品类、风格等替换信息</div>
           <el-form :model="fissionForm" label-width="100px" style="margin-top:16px">
-            <el-row :gutter="16">
-              <el-col :span="12">
-                <el-form-item label="新主题">
-                  <el-input v-model="fissionForm.new_topic" placeholder="例如：办公室解压零食推荐" />
+            <!-- 基础信息 -->
+            <div class="form-section">
+              <div class="form-section-title">📌 基础信息</div>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="新主题" required>
+                    <el-input v-model="fissionForm.new_topic" placeholder="例如：办公室解压零食推荐" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="新品类">
+                    <el-select v-model="fissionForm.new_category" placeholder="选择品类" style="width:100%">
+                      <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="新风格">
+                    <el-select v-model="fissionForm.new_style" placeholder="选择风格（可选）" clearable style="width:100%">
+                      <el-option v-for="opt in options.style" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="投放平台">
+                    <el-select v-model="fissionForm.new_platform" placeholder="选择平台（可选）" clearable style="width:100%">
+                      <el-option v-for="opt in options.platform" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+
+            <!-- L5 表达层 -->
+            <div class="form-section">
+              <div class="form-section-title">💬 L5 表达层 — 金句、数据、视觉</div>
+              <el-form-item label="金句">
+                <el-select v-model="fissionForm.replacement.L5.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句（多条会均匀分配到各段落）" style="width:100%">
+                  <el-option v-for="opt in options.golden_sentence" :key="opt.value" :label="opt.label" :value="opt.value" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="数据引用">
+                <el-select v-model="fissionForm.replacement.L5.data_refs" multiple allow-create filterable placeholder="选择或输入数据（会嵌入到正文段落中）" style="width:100%">
+                  <el-option v-for="opt in options.data_ref" :key="opt.value" :label="opt.label" :value="opt.value" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="视觉描述">
+                <el-select v-model="fissionForm.replacement.L5.visual_desc" multiple allow-create filterable placeholder="选择或输入视觉描述（会生成画面指导）" style="width:100%">
+                  <el-option v-for="opt in options.visual_desc" :key="opt.value" :label="opt.label" :value="opt.value" />
+                </el-select>
+              </el-form-item>
+            </div>
+
+            <!-- L4 元素层（可选覆盖） -->
+            <div class="form-section">
+              <div class="form-section-title">
+                🧩 L4 元素层 — 可选覆盖
+                <el-checkbox v-model="showL4Overrides" style="margin-left:12px;font-size:13px">自定义覆盖</el-checkbox>
+              </div>
+              <template v-if="showL4Overrides">
+                <el-row :gutter="16">
+                  <el-col :span="12">
+                    <el-form-item label="钩子句式">
+                      <el-input v-model="fissionForm.replacement.L4.hook" placeholder="覆盖骨架中的钩子句式" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item label="转折方式">
+                      <el-input v-model="fissionForm.replacement.L4.transition" placeholder="覆盖骨架中的转折方式" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-form-item label="互动设计">
+                  <el-input v-model="fissionForm.replacement.L4.interaction" placeholder="覆盖骨架中的互动设计" />
                 </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="新品类">
-                  <el-select v-model="fissionForm.new_category" placeholder="选择品类" style="width:100%">
-                    <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-            <el-row :gutter="16">
-              <el-col :span="12">
-                <el-form-item label="新风格">
-                  <el-select v-model="fissionForm.new_style" placeholder="选择风格" style="width:100%">
-                    <el-option v-for="opt in options.style" :key="opt.value" :label="opt.label" :value="opt.value" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="金句">
-                  <el-select v-model="fissionForm.replacement.L5.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句" style="width:100%">
-                    <el-option v-for="opt in options.golden_sentence" :key="opt.value" :label="opt.label" :value="opt.value" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-            <el-form-item label="数据">
-              <el-select v-model="fissionForm.replacement.L5.data_refs" multiple allow-create filterable placeholder="选择或输入数据" style="width:100%">
-                <el-option v-for="opt in options.data_ref" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
+              </template>
+            </div>
+
+            <el-form-item style="margin-top:20px">
               <el-button type="primary" @click="executeFission" :loading="loading" size="large">
                 ⚡ 开始裂变
               </el-button>
+              <el-button @click="resetFissionForm" size="large">🔄 重置</el-button>
             </el-form-item>
           </el-form>
         </div>
@@ -126,7 +172,10 @@
     <div class="card result-card" v-if="fissionResult">
       <div class="result-header">
         <div class="result-badge">✨ 裂变完成</div>
-        <div class="result-title">{{ fissionResult.output_title }}</div>
+        <div class="result-meta">
+          <el-tag size="small" type="success">{{ fissionModeLabel }}</el-tag>
+          <span class="result-skeleton-name">基于：{{ selectedSkeletonName }}</span>
+        </div>
       </div>
 
       <div class="result-prediction">
@@ -143,11 +192,24 @@
 
       <div class="result-content-wrapper">
         <div class="result-content-label">📝 裂变产出内容</div>
-        <pre class="result-content">{{ fissionResult.output_content }}</pre>
+        <div class="result-content-sections">
+          <div v-for="(section, idx) in parsedResult" :key="idx" class="result-section" :class="section.type">
+            <div class="section-header" v-if="section.header">
+              <span class="section-icon">{{ section.icon }}</span>
+              <span class="section-title-text">{{ section.header }}</span>
+            </div>
+            <div class="section-body" v-if="section.lines.length">
+              <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
+                <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
+                <span class="line-text">{{ line.text }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="result-actions">
-        <el-button type="primary" @click="copyResult" size="large">📋 复制文本</el-button>
+        <el-button type="primary" @click="copyResult" size="large">📋 复制纯文本</el-button>
         <el-button @click="resetFission" size="large">🔄 再来一次</el-button>
       </div>
     </div>
@@ -198,13 +260,35 @@ const fissionModes = computed(() => {
   })
 })
 
+const showL4Overrides = ref(false)
+
 const fissionForm = reactive({
   skeleton_id: null,
   fission_mode: 'replace_leaf',
   new_topic: '',
   new_category: '',
   new_style: '',
-  replacement: { L5: { golden_sentences: [], data_refs: [] } },
+  new_platform: '',
+  replacement: {
+    L5: { golden_sentences: [], data_refs: [], visual_desc: [], hook: '', interaction: '' },
+    L4: { hook: '', transition: '', interaction: '' },
+  },
+})
+
+const fissionModeLabel = computed(() => {
+  const map = { replace_leaf: '换叶子', replace_branch: '换枝杈', replace_style: '换表达' }
+  return map[fissionMode.value] || fissionMode.value
+})
+
+const selectedSkeletonName = computed(() => {
+  const sk = skeletons.value.find(s => s.id === selectedSkeleton.value)
+  return sk ? sk.name : ''
+})
+
+// 解析裂变结果为结构化段落
+const parsedResult = computed(() => {
+  if (!fissionResult.value?.output_content) return []
+  return parseFissionContent(fissionResult.value.output_content)
 })
 
 const fetchOptions = async () => {
@@ -263,10 +347,69 @@ const copyResult = () => {
 
 const resetFission = () => {
   fissionResult.value = null
+  resetFissionForm()
+}
+
+// 解析裂变输出内容为结构化数据
+function parseFissionContent(raw) {
+  if (!raw) return []
+  const lines = raw.split('\n')
+  const sections = []
+  let current = null
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    // 段落标题 【xxx】
+    const headerMatch = trimmed.match(/^【(.+?)】/)
+    if (headerMatch) {
+      // 判断段落类型
+      const header = headerMatch[1]
+      let type = 'section'
+      let icon = '📄'
+      if (header.startsWith('标题')) { type = 'title'; icon = '📌' }
+      else if (header.startsWith('备用')) { type = 'backup'; icon = '📦' }
+      else if (header.includes('开头') || header.includes('痛点')) { type = 'hook'; icon = '🎣' }
+      else if (header.includes('主体') || header.includes('卖点')) { type = 'body'; icon = '💪' }
+      else if (header.includes('转折') || header.includes('过渡')) { type = 'transition'; icon = '🔀' }
+      else if (header.includes('结尾') || header.includes('互动')) { type = 'ending'; icon = '🎯' }
+
+      current = { header, type, icon, lines: [] }
+      sections.push(current)
+      continue
+    }
+
+    // 内容行
+    if (current) {
+      let lineType = 'text'
+      let icon = ''
+      const content = trimmed
+
+      if (content.startsWith('💬')) { lineType = 'quotation'; icon = '💬' }
+      else if (content.startsWith('📊')) { lineType = 'data'; icon = '📊' }
+      else if (content.startsWith('📷')) { lineType = 'visual'; icon = '📷' }
+      else if (content.startsWith('🔀')) { lineType = 'transition'; icon = '🔀' }
+      else if (content.startsWith('[')) { lineType = 'placeholder'; icon = '✏️' }
+
+      const text = icon ? content.slice(icon.length).trim() : content
+      current.lines.push({ type: lineType, icon, text })
+    }
+  }
+
+  return sections
+}
+
+const resetFissionForm = () => {
   fissionForm.new_topic = ''
   fissionForm.new_category = ''
   fissionForm.new_style = ''
-  fissionForm.replacement = { L5: { golden_sentences: [], data_refs: [] } }
+  fissionForm.new_platform = ''
+  fissionForm.replacement = {
+    L5: { golden_sentences: [], data_refs: [], visual_desc: [], hook: '', interaction: '' },
+    L4: { hook: '', transition: '', interaction: '' },
+  }
+  showL4Overrides.value = false
 }
 
 onMounted(() => {
@@ -327,6 +470,10 @@ onMounted(() => {
 .mode-rate { font-size: 12px; color: #e67e22; margin-top: 6px; font-weight: 500; }
 .mode-recommend { font-size: 11px; color: #e74c3c; font-weight: 600; margin-top: 4px; }
 
+/* Form sections */
+.form-section { margin-bottom: 20px; padding: 16px; background: #fafbfc; border-radius: 10px; border: 1px solid #eee; }
+.form-section-title { font-size: 14px; font-weight: 600; color: #555; margin-bottom: 12px; display: flex; align-items: center; }
+
 /* Result card */
 .result-card { border: 2px solid #43e97b; }
 .result-header { text-align: center; margin-bottom: 20px; }
@@ -335,7 +482,8 @@ onMounted(() => {
   background: linear-gradient(135deg, #43e97b, #38f9d7);
   color: #fff; font-size: 13px; font-weight: 600; margin-bottom: 8px;
 }
-.result-title { font-size: 18px; font-weight: 700; color: #1a1a2e; }
+.result-meta { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.result-skeleton-name { font-size: 13px; color: #999; }
 
 .result-prediction {
   display: flex; align-items: center; justify-content: center; gap: 24px;
@@ -349,11 +497,27 @@ onMounted(() => {
 
 .result-content-wrapper { margin-bottom: 20px; }
 .result-content-label { font-size: 13px; font-weight: 600; color: #666; margin-bottom: 8px; }
-.result-content {
-  font-size: 13px; color: #555; line-height: 2; white-space: pre-wrap;
-  background: #f8f9fa; padding: 20px; border-radius: 10px;
-  border-left: 4px solid #43e97b;
-}
+.result-content-sections { background: #f8f9fa; border-radius: 10px; border-left: 4px solid #43e97b; overflow: hidden; }
+.result-section { border-bottom: 1px solid #eee; }
+.result-section:last-child { border-bottom: none; }
+.result-section .section-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px 4px; }
+.result-section .section-icon { font-size: 16px; }
+.result-section .section-title-text { font-size: 13px; font-weight: 600; color: #333; }
+.result-section .section-body { padding: 0 16px 10px 40px; }
+.result-section .section-line { font-size: 13px; line-height: 1.8; display: flex; align-items: flex-start; gap: 6px; }
+.result-section .line-icon { flex-shrink: 0; }
+.result-section .line-text { color: #444; }
+.result-section .section-line.quotation .line-text { color: #27ae60; }
+.result-section .section-line.data .line-text { color: #667eea; }
+.result-section .section-line.visual .line-text { color: #f093fb; }
+.result-section .section-line.placeholder .line-text { color: #bbb; font-style: italic; }
+.result-section.title .section-title-text { font-size: 15px; color: #1a1a2e; }
+.result-section.hook .section-title-text { color: #f093fb; }
+.result-section.body .section-title-text { color: #27ae60; }
+.result-section.transition .section-title-text { color: #667eea; }
+.result-section.ending .section-title-text { color: #e67e22; }
+.result-section.backup { background: #fff8e6; }
+.result-section.backup .section-title-text { color: #e6a700; }
 
 .result-actions { display: flex; gap: 12px; justify-content: center; padding-top: 16px; border-top: 1px solid #f0f0f0; }
 </style>

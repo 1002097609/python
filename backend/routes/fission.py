@@ -140,122 +140,284 @@ def execute_fission(data: FissionRequest, db: Session = Depends(get_db)):
     }
 
 
+def _distribute_items(items, count):
+    """将 items 均匀分配到 count 个位置中。例如 items=[a,b,c], count=5 -> [a, b, c, a, b]"""
+    if not items or count <= 0:
+        return []
+    result = []
+    for i in range(count):
+        result.append(items[i % len(items)])
+    return result
+
+
+def _fill_template(template, new_topic, data_ref=""):
+    """填充模板句式：将占位符 {topic}、{data} 替换为实际内容。"""
+    result = template.replace("{topic}", new_topic)
+    result = result.replace("{data}", data_ref)
+    return result
+
+
 def _generate_output(fission_mode, structure, elements, strategy, new_topic, replacement) -> str:
     """
-    模板填充引擎：根据裂变模式和骨架结构，将新内容填充到骨架中生成最终文案。
+    模板填充引擎：根据裂变模式和骨架结构，将用户输入的新内容填充到骨架中生成最终文案。
 
-    三种裂变模式的核心差异：
-      - replace_leaf（换叶子）:   保持 L2-L4 骨架不变，替换 L1（主题）和 L5（表达）
-      - replace_branch（换枝杈）: 保持 L1-L2 主题策略不变，替换 L3（结构）和 L4（元素）
-      - replace_style（换表达）:  保持 L1/L3-L4 骨架不变，替换 L2（策略）和 L5（表达）
+    设计原则：
+      - 尽可能多地利用用户输入的数据（金句、数据引用、视觉描述等）
+      - 金句按段落数量均匀分配，避免只用第一条
+      - 数据引用作为支撑数据嵌入到相关段落中
+      - 视觉描述生成独立的画面指导
+      - 骨架中的 template 字段作为句式模板，用新主题和数据填充
 
-    所有需要用户手动填写的部分通过 replacement 参数传入，
-    若 replacement 中未提供对应内容，则输出段落占位符。
+    不同裂变模式：
+      - replace_leaf:   保持 L2-L4 骨架，替换 L1（主题）和 L5（表达）
+      - replace_branch: 保持 L1-L2 主题策略，替换 L3（结构）和 L4（元素）
+      - replace_style:  保持 L1/L3-L4 骨架，替换 L2（策略）和 L5（表达）
 
-    参数：
-        fission_mode (str):  裂变模式，决定替换哪些层级。
-        structure (list):    L3 结构层数据，包含各段落名称和功能描述。
-        elements (dict):     L4 元素层数据，包含可插拔的元素（标题公式、钩子等）。
-        strategy (str):      L2 策略层描述。
-        new_topic (str):     新主题/品类名称，用于替换原主题内容。
-        replacement (dict):  自定义替换内容字典，key 为层级（如 "L5"），value 为替换数据。
-
-    返回值：
-        str: 填充后的素材文案，段落之间用换行符分隔。
+    返回：填充后的素材文案字符串（含标题、正文段落和视觉指导）
     """
-    content = []
+    import json as _json
 
-    # 从 replacement 中提取各层替换数据（可能为空）
-    l5_data = replacement.get("L5", {})
-    l4_data = replacement.get("L4", {})
-    l3_data = replacement.get("L3", {})
-    l2_data = replacement.get("L2", {})
+    # 数据准备
+    l5_data = replacement.get("L5", {}) if replacement else {}
+    l4_data = replacement.get("L4", {}) if replacement else {}
+    l3_data = replacement.get("L3", {}) if replacement else {}
+    l2_data = replacement.get("L2", {}) if replacement else {}
 
-    # 获取用户提供的金句列表和策略描述
     golden_sentences = l5_data.get("golden_sentences", [])
-    new_strategy = l2_data.get("strategy_desc", strategy)  # 换表达模式下使用新策略
+    data_refs = l5_data.get("data_refs", [])
+    visual_descs = l5_data.get("visual_desc", [])
+    custom_hook = l5_data.get("hook") or l4_data.get("hook")
+    custom_interaction = l5_data.get("interaction") or l4_data.get("interaction")
+    new_strategy = l2_data.get("strategy_desc", strategy)
 
-    # 遍历结构层中的每个段落，逐段填充内容
-    if isinstance(structure, list):
-        for section in structure:
-            section_name = section.get("name", "")        # 段落名称，如"开头"、"主体"
-            section_func = section.get("function", "")     # 段落功能描述，如"痛点共鸣"
-            content.append(f"【{section_name} — {section_func}】")
+    # 解析 elements 和 structure
+    if isinstance(elements, str):
+        elements = _json.loads(elements) or {}
+    elements = elements or {}
+    if isinstance(structure, str):
+        structure = _json.loads(structure) or []
+    sections = structure if isinstance(structure, list) else []
+    section_count = len(sections)
 
-            # --------------------------------------------------
-            # replace_leaf 模式：保持骨架（L2-L4）不变，替换主题和表达
-            # --------------------------------------------------
-            if fission_mode == "replace_leaf":
-                # 开头段落：用新主题生成共鸣句式
-                if section_name in ("开头", "痛点共鸣"):
-                    hook = l5_data.get("hook") or l4_data.get("hook")
-                    content.append(hook or f"你是否也有{new_topic}相关的困扰？")
-                # 主体段落：优先使用用户提供的金句，其次使用骨架元素中的钩子
-                elif section_name in ("主体", "卖点"):
-                    if golden_sentences:
-                        content.append(golden_sentences[0])
-                    elif elements and isinstance(elements, dict):
-                        hook = elements.get("hook", "")
-                        content.append(hook or f"[请填写{section_name}内容]")
-                    else:
-                        content.append(f"[请填写{section_name}内容]")
-                # 结尾段落：优先使用用户提供的互动设计，其次使用骨架元素
-                elif section_name in ("结尾", "互动"):
-                    interaction = l5_data.get("interaction") or (elements or {}).get("interaction", "")
-                    content.append(interaction or f"[请填写{section_name}内容]")
-                else:
-                    filler = l5_data.get(section_name, "")
-                    content.append(filler or f"[请填写{section_name}内容]")
+    # 预分配：将金句、数据、视觉描述均匀分配到各段落
+    gs_per_section = _distribute_items(golden_sentences, section_count)
+    dr_per_section = _distribute_items(data_refs, section_count)
+    vd_per_section = _distribute_items(visual_descs, section_count)
 
-            # --------------------------------------------------
-            # replace_branch 模式：保持主题策略（L1-L2）不变，替换结构和元素
-            # --------------------------------------------------
-            elif fission_mode == "replace_branch":
-                # 从 replacement.L3 获取新结构段落的内容
-                branch_content = l3_data.get(section_name, {})
-                if isinstance(branch_content, dict):
-                    # 如果 L3 替换数据是 dict，提取 content 字段
-                    text = branch_content.get("content", "")
-                elif isinstance(branch_content, str):
-                    text = branch_content
-                else:
-                    text = ""
+    content_lines = []
 
-                if text:
-                    content.append(text)
-                else:
-                    # 回退到原骨架的段落内容
-                    section_content = section.get("content", "")
-                    content.append(section_content or f"[请填写{section_name}内容]")
+    # 生成标题
+    title_formula = l4_data.get("title_formula") or elements.get("title_formula", "")
+    if title_formula and new_topic:
+        title = _fill_template(title_formula, new_topic, data_refs[0] if data_refs else "")
+        content_lines.append(f"【标题】{title}")
+        content_lines.append("")
 
-            # --------------------------------------------------
-            # replace_style 模式：保持骨架（L1/L3-L4）不变，替换策略和表达
-            # --------------------------------------------------
-            elif fission_mode == "replace_style":
-                # 开头段落：使用新策略生成开场
-                if section_name in ("开头", "痛点共鸣"):
-                    new_hook = l2_data.get("hook") or l5_data.get("hook")
-                    content.append(new_hook or f"[请用「{new_strategy or '新策略'}」风格填写{section_name}]")
-                # 主体段落：在新策略框架下重写表达
-                elif section_name in ("主体", "卖点"):
-                    style_content = l5_data.get(section_name) or l5_data.get("golden_sentences", [])
-                    if isinstance(style_content, list) and style_content:
-                        content.append(style_content[0])
-                    elif isinstance(style_content, str) and style_content:
-                        content.append(style_content)
-                    else:
-                        content.append(f"[请用「{new_strategy or '新策略'}」风格填写{section_name}]")
-                # 结尾段落：在新策略框架下设计互动
-                elif section_name in ("结尾", "互动"):
-                    new_interaction = l2_data.get("interaction") or l5_data.get("interaction")
-                    content.append(new_interaction or f"[请用「{new_strategy or '新策略'}」风格填写{section_name}]")
-                else:
-                    style_text = l5_data.get(section_name, "")
-                    content.append(style_text or f"[请用「{new_strategy or '新策略'}」风格填写{section_name}]")
+    # 生成正文段落
+    for idx, section in enumerate(sections):
+        section_name = section.get("name", f"段落{idx+1}")
+        section_func = section.get("function", "")
+        section_template = section.get("template", "")
+        section_ratio = section.get("ratio", 0)
 
-            content.append("")
+        content_lines.append(f"【{section_name} — {section_func}】（占比 {section_ratio}%）")
 
-    return "\n".join(content)
+        paragraph_blocks = []
+
+        if fission_mode == "replace_leaf":
+            block = _build_leaf_block(
+                section=section, section_name=section_name, new_topic=new_topic,
+                gs=gs_per_section[idx] if idx < len(gs_per_section) else "",
+                dr=dr_per_section[idx] if idx < len(dr_per_section) else "",
+                custom_hook=custom_hook, custom_interaction=custom_interaction,
+                elements=elements, l4_data=l4_data, l2_data=l2_data, strategy=strategy,
+            )
+            if block:
+                paragraph_blocks.append(block)
+
+        elif fission_mode == "replace_branch":
+            block = _build_branch_block(
+                section=section, section_name=section_name,
+                l3_data=l3_data,
+                gs=gs_per_section[idx] if idx < len(gs_per_section) else "",
+                dr=dr_per_section[idx] if idx < len(dr_per_section) else "",
+            )
+            if block:
+                paragraph_blocks.append(block)
+
+        elif fission_mode == "replace_style":
+            block = _build_style_block(
+                section_name=section_name,
+                new_strategy=new_strategy or (strategy or "新策略"),
+                gs=gs_per_section[idx] if idx < len(gs_per_section) else "",
+                dr=dr_per_section[idx] if idx < len(dr_per_section) else "",
+                custom_hook=custom_hook, custom_interaction=custom_interaction,
+                l2_data=l2_data,
+            )
+            if block:
+                paragraph_blocks.append(block)
+
+        content_lines.extend(paragraph_blocks)
+
+        # 视觉描述
+        vd = vd_per_section[idx] if idx < len(vd_per_section) else ""
+        if vd:
+            content_lines.append(f"  📷 画面指导：{vd}")
+
+        content_lines.append("")
+
+    # 备用素材汇总
+    used_gs = min(len(gs_per_section), section_count)
+    remaining_gs = golden_sentences[used_gs:] if len(golden_sentences) > used_gs else []
+    used_dr = min(len(dr_per_section), section_count)
+    remaining_dr = data_refs[used_dr:] if len(data_refs) > used_dr else []
+    used_vd = min(len(vd_per_section), section_count)
+    remaining_vd = visual_descs[used_vd:] if len(visual_descs) > used_vd else []
+
+    if remaining_gs or remaining_dr or remaining_vd:
+        content_lines.append("【备用素材 — 可在上述段落中灵活替换】")
+        if remaining_gs:
+            content_lines.append(f"  💬 额外金句：{' | '.join(remaining_gs)}")
+        if remaining_dr:
+            content_lines.append(f"  📊 额外数据：{' | '.join(remaining_dr)}")
+        if remaining_vd:
+            content_lines.append(f"  📷 额外画面：{' | '.join(remaining_vd)}")
+        content_lines.append("")
+
+    return "\n".join(content_lines)
+
+
+def _build_leaf_block(section, section_name, new_topic, gs, dr, custom_hook,
+                      custom_interaction, elements, l4_data, l2_data, strategy):
+    """replace_leaf 模式：保持 L2-L4 骨架，替换主题和表达。"""
+    section_template = section.get("template", "")
+    name_lower = section_name.lower()
+    is_hook = any(k in name_lower for k in ("开头", "痛点", "共鸣", "钒子", "引入"))
+    is_body = any(k in name_lower for k in ("主体", "卖点", "核心", "论证", "展示", "测评"))
+    is_ending = any(k in name_lower for k in ("结尾", "互动", "收尾", "号召", "转化"))
+    is_transition = any(k in name_lower for k in ("转折", "过渡", "对比"))
+
+    lines = []
+
+    # 模板句式填充
+    if section_template and new_topic:
+        lines.append(f"  {_fill_template(section_template, new_topic, dr)}")
+
+    if is_hook:
+        hook = custom_hook or l4_data.get("hook") or elements.get("hook", "")
+        if hook:
+            lines.append(f"  {_fill_template(hook, new_topic, dr)}")
+        elif not section_template:
+            lines.append(f"  你是否也在为{new_topic}而烦惱？")
+
+    elif is_body:
+        if gs:
+            lines.append(f"  💬 {gs}")
+        if dr:
+            lines.append(f"  📊 数据支撑：{dr}")
+        transition = l4_data.get("transition") or elements.get("transition", "")
+        if transition:
+            lines.append(f"  🔀 {_fill_template(transition, new_topic, dr)}")
+        if not lines and strategy:
+            lines.append(f"  策略参考：{strategy}")
+
+    elif is_transition:
+        transition = l4_data.get("transition") or elements.get("transition", "")
+        if transition:
+            lines.append(f"  {_fill_template(transition, new_topic, dr)}")
+        if gs:
+            lines.append(f"  💬 {gs}")
+
+    elif is_ending:
+        interaction = custom_interaction or l4_data.get("interaction") or elements.get("interaction", "")
+        if interaction:
+            lines.append(f"  {_fill_template(interaction, new_topic, dr)}")
+        if gs:
+            lines.append(f"  💬 {gs}")
+        if not interaction and not gs:
+            lines.append(f"  评论区告诉我你对{new_topic}的看法！")
+
+    else:
+        if gs:
+            lines.append(f"  💬 {gs}")
+        elif dr:
+            lines.append(f"  📊 {dr}")
+        elif not section_template:
+            lines.append(f"  [请围绕「{new_topic}」填写{section_name}内容]")
+
+    return "\n".join(lines) if lines else ""
+
+
+def _build_branch_block(section, section_name, l3_data, gs, dr):
+    """replace_branch 模式：保持主题策略不变，替换结构和元素。"""
+    lines = []
+    branch_content = l3_data.get(section_name, {})
+
+    if isinstance(branch_content, dict):
+        text = branch_content.get("content", "")
+    elif isinstance(branch_content, str):
+        text = branch_content
+    else:
+        text = ""
+
+    if text:
+        lines.append(f"  {text}")
+    else:
+        section_content = section.get("content", "")
+        if section_content:
+            lines.append(f"  {section_content}")
+        else:
+            lines.append(f"  [请填写新的{section_name}内容]")
+
+    if gs:
+        lines.append(f"  💬 {gs}")
+    if dr:
+        lines.append(f"  📊 数据支撑：{dr}")
+
+    return "\n".join(lines) if lines else ""
+
+
+def _build_style_block(section_name, new_strategy, gs, dr, custom_hook,
+                       custom_interaction, l2_data):
+    """replace_style 模式：保持骨架不变，替换策略和表达。"""
+    name_lower = section_name.lower()
+    is_hook = any(k in name_lower for k in ("开头", "痛点", "共鸣", "钒子"))
+    is_body = any(k in name_lower for k in ("主体", "卖点", "核心", "论证", "展示"))
+    is_ending = any(k in name_lower for k in ("结尾", "互动", "收尾", "号召"))
+
+    lines = []
+    strategy_tag = f"「{new_strategy}」" if new_strategy else ""
+
+    if is_hook:
+        hook = l2_data.get("hook") or custom_hook
+        if hook:
+            lines.append(f"  {hook}")
+        else:
+            lines.append(f"  请用{strategy_tag}风格撰写开头钒子")
+
+    elif is_body:
+        if gs:
+            lines.append(f"  💬 {gs}")
+        if dr:
+            lines.append(f"  📊 数据支撑：{dr}")
+        if not gs and not dr:
+            lines.append(f"  请用{strategy_tag}风格重写{section_name}内容")
+
+    elif is_ending:
+        interaction = l2_data.get("interaction") or custom_interaction
+        if interaction:
+            lines.append(f"  {interaction}")
+        else:
+            lines.append(f"  请用{strategy_tag}风格设计互动收尾")
+
+    else:
+        if gs:
+            lines.append(f"  💬 {gs}")
+        else:
+            lines.append(f"  请用{strategy_tag}风格填写{section_name}")
+
+    return "\n".join(lines) if lines else ""
+
 
 
 def _predict_performance(skeleton, fission_mode, db=None) -> dict:
