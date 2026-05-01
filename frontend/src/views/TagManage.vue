@@ -242,12 +242,12 @@ const handleSaveEdit = async (tag) => {
     return
   }
   try {
-    const { data } = await updateTag(tag.id, {
+    const updated = await updateTag(tag.id, {
       name: editForm.name.trim(),
       type: editForm.type,
     })
-    tag.name = data.name
-    tag.type = data.type
+    tag.name = updated.name
+    tag.type = updated.type
     ElMessage.success('标签更新成功')
     editingId.value = null
   } catch (e) {
