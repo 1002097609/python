@@ -155,9 +155,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api, { getOptions } from '../api'
+
+const route = useRoute()
 
 const loading = ref(false)
 const loadingOptions = ref(false)
@@ -264,7 +267,16 @@ const resetFission = () => {
 
 onMounted(() => {
   fetchOptions()
-  fetchSkeletons()
+  fetchSkeletons().then(() => {
+    const skeletonId = route.query.skeleton_id
+    if (skeletonId) {
+      const id = Number(skeletonId)
+      if (skeletons.value.find(s => s.id === id)) {
+        selectedSkeleton.value = id
+        fissionForm.skeleton_id = id
+      }
+    }
+  })
 })
 </script>
 

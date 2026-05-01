@@ -30,23 +30,27 @@
       </div>
     </div>
 
+    <!-- 筛选 -->
     <div class="card">
       <div class="card-toolbar">
         <div class="toolbar-left">
           <span class="dot"></span>
           <span class="card-title">骨架列表</span>
         </div>
+        <el-select v-model="filterType" placeholder="按类型筛选" clearable style="width:160px">
+          <el-option v-for="t in skeletonTypes" :key="t" :label="t" :value="t" />
+        </el-select>
       </div>
 
-      <div v-if="skeletons.length === 0" class="empty-state">
+      <div v-if="filteredSkeletons.length === 0" class="empty-state">
         <div class="empty-icon">🦴</div>
         <div class="empty-text">暂无骨架</div>
         <div class="empty-hint">在「素材拆解」页面完成拆解并提取骨架后，骨架会自动出现在这里</div>
       </div>
 
       <el-row :gutter="16" v-else>
-        <el-col :span="8" v-for="sk in skeletons" :key="sk.id">
-          <div class="skeleton-card">
+        <el-col :span="8" v-for="sk in filteredSkeletons" :key="sk.id">
+          <div class="skeleton-card" @click="viewDetail(sk)">
             <div class="sk-header">
               <div class="sk-title">{{ sk.name }}</div>
               <el-tag size="small" type="success" effect="plain">{{ sk.skeleton_type }}</el-tag>
@@ -67,21 +71,86 @@
             </div>
             <div class="sk-footer">
               <span class="sk-date">{{ formatDate(sk.created_at) }}</span>
-              <el-button type="primary" link size="small" @click="goFission(sk)">去裂变 →</el-button>
+              <div class="sk-actions" @click.stop>
+                <el-button type="primary" link size="small" @click="goFission(sk)">去裂变 →</el-button>
+                <el-button type="danger" link size="small" @click="handleDelete(sk)">删除</el-button>
+              </div>
             </div>
           </div>
         </el-col>
       </el-row>
     </div>
+
+    <!-- 骨架详情弹窗 -->
+    <el-dialog v-model="detailVisible" title="骨架详情" width="640px" destroy-on-close>
+      <div v-if="currentSkeleton" class="detail-body">
+        <div class="detail-row">
+          <span class="detail-label">名称</span>
+          <span class="detail-value">{{ currentSkeleton.name }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">类型</span>
+          <el-tag size="small" type="success">{{ currentSkeleton.skeleton_type }}</el-tag>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">使用次数</span>
+          <span class="detail-value">{{ currentSkeleton.usage_count || 0 }}</span>
+        </div>
+        <div class="detail-row" v-if="currentSkeleton.avg_roi">
+          <span class="detail-label">平均ROI</span>
+          <span class="detail-value highlight">{{ Number(currentSkeleton.avg_roi).toFixed(1) }}x</span>
+        </div>
+        <div class="detail-row" v-if="currentSkeleton.avg_ctr">
+          <span class="detail-label">平均CTR</span>
+          <span class="detail-value highlight">{{ Number(currentSkeleton.avg_ctr).toFixed(1) }}%</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">创建时间</span>
+          <span class="detail-value">{{ formatDate(currentSkeleton.created_at) }}</span>
+        </div>
+        <div class="detail-row detail-block" v-if="currentSkeleton.strategy_desc">
+          <span class="detail-label">策略描述</span>
+          <div class="detail-content">{{ currentSkeleton.strategy_desc }}</div>
+        </div>
+        <div class="detail-row detail-block" v-if="currentSkeleton.structure_json">
+          <span class="detail-label">结构 JSON</span>
+          <pre class="detail-content code">{{ formatJson(currentSkeleton.structure_json) }}</pre>
+        </div>
+        <div class="detail-row detail-block" v-if="currentSkeleton.elements_json">
+          <span class="detail-label">元素 JSON</span>
+          <pre class="detail-content code">{{ formatJson(currentSkeleton.elements_json) }}</pre>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="primary" v-if="currentSkeleton" @click="goFissionFromDetail">去裂变 →</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 
+const router = useRouter()
+
 const skeletons = ref([])
+const filterType = ref('')
+const detailVisible = ref(false)
+const currentSkeleton = ref(null)
+
+const skeletonTypes = computed(() => {
+  const set = new Set(skeletons.value.map(s => s.skeleton_type).filter(Boolean))
+  return [...set]
+})
+
+const filteredSkeletons = computed(() => {
+  if (!filterType.value) return skeletons.value
+  return skeletons.value.filter(s => s.skeleton_type === filterType.value)
+})
 
 const highUsageCount = computed(() => skeletons.value.filter(s => (s.usage_count || 0) > 5).length)
 const totalUsage = computed(() => skeletons.value.reduce((sum, s) => sum + (s.usage_count || 0), 0))
@@ -89,6 +158,13 @@ const totalUsage = computed(() => skeletons.value.reduce((sum, s) => sum + (s.us
 const formatDate = (d) => {
   if (!d) return ''
   try { return new Date(d).toLocaleDateString('zh-CN') } catch { return d }
+}
+
+const formatJson = (val) => {
+  try {
+    if (typeof val === 'string') val = JSON.parse(val)
+    return JSON.stringify(val, null, 2)
+  } catch { return String(val) }
 }
 
 const fetchSkeletons = async () => {
@@ -100,8 +176,42 @@ const fetchSkeletons = async () => {
   }
 }
 
+const viewDetail = async (sk) => {
+  // 获取完整详情（包含 structure_json / elements_json）
+  try {
+    const { data } = await api.get(`/skeleton/${sk.id}`)
+    currentSkeleton.value = data
+    detailVisible.value = true
+  } catch (e) {
+    // 降级使用列表数据
+    currentSkeleton.value = sk
+    detailVisible.value = true
+  }
+}
+
 const goFission = (sk) => {
-  ElMessage.success(`请前往「素材裂变」页面，选择「${sk.name}」进行裂变`)
+  router.push({ path: '/fission', query: { skeleton_id: sk.id } })
+}
+
+const goFissionFromDetail = () => {
+  detailVisible.value = false
+  goFission(currentSkeleton.value)
+}
+
+const handleDelete = (sk) => {
+  ElMessageBox.confirm(`确认删除骨架「${sk.name}」？删除后不可恢复。`, '警告', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+  }).then(async () => {
+    try {
+      await api.delete(`/skeleton/${sk.id}`)
+      ElMessage.success('删除成功')
+      await fetchSkeletons()
+    } catch (e) {
+      ElMessage.error('删除失败')
+    }
+  }).catch(() => {})
 }
 
 onMounted(fetchSkeletons)
@@ -154,4 +264,22 @@ onMounted(fetchSkeletons)
 
 .sk-footer { display: flex; align-items: center; justify-content: space-between; }
 .sk-date { font-size: 12px; color: #bbb; }
+.sk-actions { display: flex; gap: 4px; }
+
+/* Detail dialog */
+.detail-body { display: flex; flex-direction: column; gap: 14px; }
+.detail-row { display: flex; align-items: center; gap: 12px; }
+.detail-row.detail-block { flex-direction: column; align-items: flex-start; gap: 6px; }
+.detail-label { font-size: 13px; color: #999; min-width: 70px; flex-shrink: 0; }
+.detail-value { font-size: 14px; color: #333; }
+.detail-value.highlight { color: #27ae60; font-weight: 600; }
+.detail-content {
+  font-size: 13px; color: #555; line-height: 1.8; white-space: pre-wrap;
+  background: #f8f9fa; padding: 14px; border-radius: 8px; width: 100%;
+  max-height: 200px; overflow-y: auto;
+}
+.detail-content.code {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 12px; line-height: 1.6;
+}
 </style>

@@ -50,6 +50,15 @@ def get_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
     return skeleton
 
 
+@router.delete("/{skeleton_id}", status_code=204)
+def delete_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
+    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+    if not skeleton:
+        raise HTTPException(status_code=404, detail="骨架不存在")
+    db.delete(skeleton)
+    db.commit()
+
+
 @router.post("/from-dismantle/{dismantle_id}")
 def create_skeleton_from_dismantle(dismantle_id: int, db: Session = Depends(get_db)):
     from ..models.dismantle import Dismantle

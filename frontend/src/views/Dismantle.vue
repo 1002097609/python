@@ -188,8 +188,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api, { getOptions } from '../api'
+
+const route = useRoute()
 
 const loading = ref(false)
 const currentMaterial = ref(null)
@@ -215,7 +218,24 @@ const fetchOptions = async () => {
   }
 }
 
-onMounted(fetchOptions)
+onMounted(() => {
+  fetchOptions()
+  // 从素材库跳转过来时自动填充
+  const materialId = route.query.material_id
+  if (materialId) {
+    currentMaterial.value = {
+      id: Number(materialId),
+      title: route.query.title || '',
+      platform: route.query.platform || '',
+      category: route.query.category || '',
+    }
+    materialForm.title = route.query.title || ''
+    materialForm.platform = route.query.platform || ''
+    materialForm.category = route.query.category || ''
+    materialForm.content = route.query.content || ''
+    dismantleForm.material_id = Number(materialId)
+  }
+})
 
 const materialForm = reactive({
   title: '',
