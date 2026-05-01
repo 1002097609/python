@@ -20,14 +20,14 @@
           <el-col :span="12">
             <el-form-item label="平台">
               <el-select v-model="materialForm.platform" placeholder="选择平台" style="width:100%">
-                <el-option v-for="opt in options.platforms" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in options.platform" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="品类">
               <el-select v-model="materialForm.category" placeholder="选择品类" style="width:100%">
-                <el-option v-for="opt in options.categories" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -83,7 +83,7 @@
           <div class="layer-body">
             <el-form-item label="策略标签">
               <el-select v-model="dismantleForm.l2_strategy" multiple placeholder="选择策略" style="width:100%">
-                <el-option v-for="opt in options.strategies" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in options.strategy" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="情绪策略">
@@ -157,17 +157,17 @@
           <div class="layer-body">
             <el-form-item label="金句">
               <el-select v-model="dismantleForm.l5_expressions.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句" style="width:100%">
-                <el-option v-for="opt in options.golden_sentences" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in options.golden_sentence" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="数据">
               <el-select v-model="dismantleForm.l5_expressions.data_refs" multiple allow-create filterable placeholder="选择或输入数据" style="width:100%">
-                <el-option v-for="opt in options.data_refs" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in options.data_ref" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="视觉">
               <el-select v-model="dismantleForm.l5_expressions.visual_desc" multiple allow-create filterable placeholder="选择或输入视觉描述" style="width:100%">
-                <el-option v-for="opt in options.visual_descs" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in options.visual_desc" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </div>
@@ -195,12 +195,15 @@ const loading = ref(false)
 const currentMaterial = ref(null)
 
 const options = ref({
-  platforms: [],
-  categories: [],
-  styles: [],
-  strategies: [],
-  skeleton_types: [],
-  fission_modes: [],
+  platform: [],
+  category: [],
+  style: [],
+  strategy: [],
+  skeleton_type: [],
+  fission_mode: [],
+  golden_sentence: [],
+  data_ref: [],
+  visual_desc: [],
 })
 
 const fetchOptions = async () => {

@@ -86,7 +86,7 @@
               <el-col :span="12">
                 <el-form-item label="新品类">
                   <el-select v-model="fissionForm.new_category" placeholder="选择品类" style="width:100%">
-                    <el-option v-for="opt in options.categories" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -95,21 +95,21 @@
               <el-col :span="12">
                 <el-form-item label="新风格">
                   <el-select v-model="fissionForm.new_style" placeholder="选择风格" style="width:100%">
-                    <el-option v-for="opt in options.styles" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    <el-option v-for="opt in options.style" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="金句">
                   <el-select v-model="fissionForm.replacement.L5.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句" style="width:100%">
-                    <el-option v-for="opt in options.golden_sentences" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    <el-option v-for="opt in options.golden_sentence" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="数据">
               <el-select v-model="fissionForm.replacement.L5.data_refs" multiple allow-create filterable placeholder="选择或输入数据" style="width:100%">
-                <el-option v-for="opt in options.data_refs" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in options.data_ref" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -168,12 +168,15 @@ const fissionMode = ref('replace_leaf')
 const fissionResult = ref(null)
 
 const options = ref({
-  platforms: [],
-  categories: [],
-  styles: [],
-  strategies: [],
-  skeleton_types: [],
-  fission_modes: [],
+  platform: [],
+  category: [],
+  style: [],
+  strategy: [],
+  skeleton_type: [],
+  fission_mode: [],
+  golden_sentence: [],
+  data_ref: [],
+  visual_desc: [],
 })
 
 const fissionModes = computed(() => {

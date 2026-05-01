@@ -4,5 +4,6 @@ from .skeleton import Skeleton
 from .fission import Fission
 from .effect_data import EffectData
 from .tag import Tag, MaterialTag
+from .option import Option
 
-__all__ = ["Material", "Dismantle", "Skeleton", "Fission", "EffectData", "Tag", "MaterialTag"]
+__all__ = ["Material", "Dismantle", "Skeleton", "Fission", "EffectData", "Tag", "MaterialTag", "Option"]

@@ -1,114 +1,24 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from ..database import get_db
+from ..models.option import Option
 
 router = APIRouter()
 
 
 @router.get("")
-def get_all_options():
-    """返回所有下拉框选项数据"""
-    return {
-        "platforms": [
-            {"label": "抖音", "value": "抖音"},
-            {"label": "小红书", "value": "小红书"},
-            {"label": "快手", "value": "快手"},
-        ],
-        "categories": [
-            {"label": "护肤", "value": "护肤"},
-            {"label": "彩妆", "value": "彩妆"},
-            {"label": "零食", "value": "零食"},
-            {"label": "母婴", "value": "母婴"},
-            {"label": "户外", "value": "户外"},
-        ],
-        "styles": [
-            {"label": "成分党", "value": "成分党"},
-            {"label": "闺蜜聊天", "value": "闺蜜聊天"},
-            {"label": "毒舌测评", "value": "毒舌测评"},
-            {"label": "温柔种草", "value": "温柔种草"},
-            {"label": "教程型", "value": "教程型"},
-            {"label": "清单型", "value": "清单型"},
-            {"label": "红黑榜型", "value": "红黑榜型"},
-            {"label": "对比测评", "value": "对比测评"},
-            {"label": "种草型", "value": "种草型"},
-            {"label": "攻略型", "value": "攻略型"},
-        ],
-        "strategies": [
-            {"label": "共鸣型", "value": "共鸣型"},
-            {"label": "成分党", "value": "成分党"},
-            {"label": "对比测评", "value": "对比测评"},
-            {"label": "悬念型", "value": "悬念型"},
-            {"label": "教程型", "value": "教程型"},
-            {"label": "清单型", "value": "清单型"},
-            {"label": "红黑榜型", "value": "红黑榜型"},
-            {"label": "种草型", "value": "种草型"},
-            {"label": "攻略型", "value": "攻略型"},
-            {"label": "误区纠正型", "value": "误区纠正型"},
-        ],
-        "skeleton_types": [
-            {"label": "通用型", "value": "通用型"},
-            {"label": "测评对比型", "value": "测评对比型"},
-            {"label": "红黑榜型", "value": "红黑榜型"},
-            {"label": "误区纠正型", "value": "误区纠正型"},
-            {"label": "教程步骤型", "value": "教程步骤型"},
-        ],
-        "fission_modes": [
-            {"label": "换叶子（同构异内容）", "value": "replace_leaf", "desc": "L1+L5 替换，骨架不变，效果保留 ~85%"},
-            {"label": "换表达（跨风格移植）", "value": "replace_style", "desc": "L2+L5 替换，骨架不变，效果保留 ~70%"},
-            {"label": "换枝杈（同内容异结构）", "value": "replace_branch", "desc": "L3+L4 替换，主题不变，效果保留 ~65%"},
-        ],
-        "golden_sentences": [
-            {"label": "含酒精香精的面霜，敏感肌千万别碰", "value": "含酒精香精的面霜，敏感肌千万别碰"},
-            {"label": "神经酰胺+胆固醇=屏障修复黄金搭档", "value": "神经酰胺+胆固醇=屏障修复黄金搭档"},
-            {"label": "硅酮填平毛孔是物理遮盖，不是真的收缩毛孔", "value": "硅酮填平毛孔是物理遮盖，不是真的收缩毛孔"},
-            {"label": "水杨酸控油还能祛痘，油痘肌亲妈", "value": "水杨酸控油还能祛痘，油痘肌亲妈"},
-            {"label": "第一口辅食一定是高铁米粉", "value": "第一口辅食一定是高铁米粉"},
-            {"label": "从稀到稠，从少到多，每次只加一种新食物", "value": "从稀到稠，从少到多，每次只加一种新食物"},
-            {"label": "热水一浇就能吃，懒人福音", "value": "热水一浇就能吃，懒人福音"},
-            {"label": "打工人的快乐就是这么简单", "value": "打工人的快乐就是这么简单"},
-            {"label": "早八人再也不用空腹上课了", "value": "早八人再也不用空腹上课了"},
-            {"label": "一口下去精神百倍", "value": "一口下去精神百倍"},
-            {"label": "90%的新手都踩过这5个坑", "value": "90%的新手都踩过这5个坑"},
-            {"label": "硅尼龙帐篷，轻到可以塞进书包", "value": "硅尼龙帐篷，轻到可以塞进书包"},
-            {"label": "鹅绒睡袋，保暖重量比的天花板", "value": "鹅绒睡袋，保暖重量比的天花板"},
-            {"label": "氨基酸洁面是油皮的最爱", "value": "氨基酸洁面是油皮的最爱"},
-            {"label": "粉底不是涂越多越好，轻薄才是王道", "value": "粉底不是涂越多越好，轻薄才是王道"},
-            {"label": "眉头浅眉尾深，自然又立体", "value": "眉头浅眉尾深，自然又立体"},
-        ],
-        "data_refs": [
-            {"label": "持妆8小时后，T区出油量减少60%", "value": "持妆8小时后，T区出油量减少60%"},
-            {"label": "连续使用28天，皮肤含水量提升40%", "value": "连续使用28天，皮肤含水量提升40%"},
-            {"label": "连续使用28天，泛红减少45%", "value": "连续使用28天，泛红减少45%"},
-            {"label": "6个月宝宝每天需要11mg铁", "value": "6个月宝宝每天需要11mg铁"},
-            {"label": "每样新食物观察3天不过敏再加下一样", "value": "每样新食物观察3天不过敏再加下一样"},
-            {"label": "1-3岁每天需要约1000大卡热量", "value": "1-3岁每天需要约1000大卡热量"},
-            {"label": "均价3块钱一顿", "value": "均价3块钱一顿"},
-            {"label": "保质期长达12个月", "value": "保质期长达12个月"},
-            {"label": "含糖量低于5g", "value": "含糖量低于5g"},
-            {"label": "热量仅100大卡", "value": "热量仅100大卡"},
-            {"label": "整套装备控制在5kg以内", "value": "整套装备控制在5kg以内"},
-            {"label": "硅尼龙比普通尼龙轻40%", "value": "硅尼龙比普通尼龙轻40%"},
-            {"label": "碳纤维登山杖，每根仅180g", "value": "碳纤维登山杖，每根仅180g"},
-            {"label": "SPF50+ PA++++ 适合户外暴晒场景", "value": "SPF50+ PA++++ 适合户外暴晒场景"},
-        ],
-        "visual_descs": [
-            {"label": "质地特写镜头", "value": "质地特写镜头"},
-            {"label": "上脸推开效果", "value": "上脸推开效果"},
-            {"label": "前后对比图", "value": "前后对比图"},
-            {"label": "半脸对比效果", "value": "半脸对比效果"},
-            {"label": "8小时后持妆对比", "value": "8小时后持妆对比"},
-            {"label": "米粉冲泡对比图", "value": "米粉冲泡对比图"},
-            {"label": "不同月龄食物质地展示", "value": "不同月龄食物质地展示"},
-            {"label": "过敏红疹警示图", "value": "过敏红疹警示图"},
-            {"label": "速食开箱合集", "value": "速食开箱合集"},
-            {"label": "冲泡过程快剪", "value": "冲泡过程快剪"},
-            {"label": "宿舍桌面场景", "value": "宿舍桌面场景"},
-            {"label": "红黑榜对比表格", "value": "红黑榜对比表格"},
-            {"label": "成分表特写", "value": "成分表特写"},
-            {"label": "上脸试用展示", "value": "上脸试用展示"},
-            {"label": "错误vs正确对比图", "value": "错误vs正确对比图"},
-            {"label": "新手化妆前后对比", "value": "新手化妆前后对比"},
-            {"label": "工具使用演示", "value": "工具使用演示"},
-            {"label": "装备全家福", "value": "装备全家福"},
-            {"label": "重量对比展示", "value": "重量对比展示"},
-            {"label": "户外使用场景", "value": "户外使用场景"},
-        ],
-    }
+def get_all_options(db: Session = Depends(get_db)):
+    """从数据库读取所有下拉框选项，按分组返回"""
+    items = (
+        db.query(Option)
+        .filter(Option.is_active == 1)
+        .order_by(Option.group_key, Option.sort_order, Option.id)
+        .all()
+    )
+    result = {}
+    for item in items:
+        key = item.group_key
+        if key not in result:
+            result[key] = []
+        result[key].append({"label": item.label, "value": item.value})
+    return result
