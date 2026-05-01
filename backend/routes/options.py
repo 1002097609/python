@@ -17,7 +17,8 @@ from ..models.option import Option
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", include_in_schema=False)
+@router.get("/")
 def get_all_options(db: Session = Depends(get_db)):
     """
     从数据库读取所有已启用的下拉框选项，按分组 key 聚合后返回。

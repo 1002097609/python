@@ -152,7 +152,12 @@ const filteredSkeletons = computed(() => {
   return skeletons.value.filter(s => s.skeleton_type === filterType.value)
 })
 
-const highUsageCount = computed(() => skeletons.value.filter(s => (s.usage_count || 0) > 5).length)
+const highUsageCount = computed(() => {
+  if (!skeletons.value.length) return 0
+  // 动态计算：使用率超过平均值的骨架视为"高复用"
+  const avgUsage = skeletons.value.reduce((sum, s) => sum + (s.usage_count || 0), 0) / skeletons.value.length
+  return skeletons.value.filter(s => (s.usage_count || 0) > avgUsage).length
+})
 const totalUsage = computed(() => skeletons.value.reduce((sum, s) => sum + (s.usage_count || 0), 0))
 
 const formatDate = (d) => {

@@ -18,14 +18,14 @@
         <div class="stat-icon">📝</div>
         <div class="stat-info">
           <div class="stat-num">{{ draftCount }}</div>
-          <div class="stat-label">草稿</div>
+          <div class="stat-label">{{ statusLabel(0) }}</div>
         </div>
       </div>
       <div class="stat-card stat-running">
         <div class="stat-icon">🚀</div>
         <div class="stat-info">
           <div class="stat-num">{{ runningCount }}</div>
-          <div class="stat-label">投放中</div>
+          <div class="stat-label">{{ statusLabel(3) }}</div>
         </div>
       </div>
       <div class="stat-card stat-done">
@@ -46,10 +46,7 @@
         </div>
         <div class="toolbar-right">
           <el-select v-model="filterStatus" placeholder="状态" clearable style="width:120px">
-            <el-option label="草稿" :value="0" />
-            <el-option label="待审核" :value="1" />
-            <el-option label="已采用" :value="2" />
-            <el-option label="已投放" :value="3" />
+            <el-option v-for="opt in options.fission_status" :key="opt.value" :label="opt.label" :value="Number(opt.value)" />
           </el-select>
           <el-select v-model="filterSkeleton" placeholder="骨架" clearable style="width:180px">
             <el-option v-for="sk in skeletonOptions" :key="sk.id" :label="sk.name" :value="sk.id" />
@@ -284,7 +281,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getFissions, getFissionDetail, createEffect, getFissionEffects } from '../api'
+import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, getOptions } from '../api'
 
 // ============================================================
 // 数据状态
@@ -299,6 +296,21 @@ const effectDialogVisible = ref(false)
 const effectFissionId = ref(null)
 const submitting = ref(false)
 const effectFormRef = ref(null)
+
+// 动态选项（从数据库加载）
+const options = ref({
+  fission_status: [],
+  fission_mode: [],
+})
+
+const fetchOptions = async () => {
+  try {
+    const data = await getOptions()
+    options.value = data
+  } catch (e) {
+    console.error('加载选项失败', e)
+  }
+}
 
 // 效果数据录入表单
 const effectForm = ref({
@@ -365,10 +377,24 @@ const hasEffectCount = computed(() => records.value.filter(r => r.actual_roi).le
 // ============================================================
 // 工具函数
 // ============================================================
-const statusLabel = (s) => ['草稿', '待审核', '已采用', '已投放'][s] || '未知'
-const statusType = (s) => ['info', 'warning', 'success', 'primary'][s] || 'info'
-const modeLabel = (m) => ({ replace_leaf: '换叶子', replace_branch: '换枝杈', replace_style: '换表达' }[m] || m)
-const modeType = (m) => ({ replace_leaf: 'success', replace_branch: 'warning', replace_style: 'primary' }[m] || 'info')
+const statusLabel = (s) => {
+  const opt = (options.value.fission_status || []).find(o => Number(o.value) === s)
+  return opt ? opt.label : '未知'
+}
+const statusType = (s) => {
+  const types = { 0: 'info', 1: 'warning', 2: 'success', 3: 'primary' }
+  return types[s] || 'info'
+}
+const modeLabel = (m) => {
+  const opt = (options.value.fission_mode || []).find(o => o.value === m)
+  if (!opt) return m
+  // label 格式: "名称|图标|描述"，取第一部分作为显示名称
+  return opt.label.split('|')[0] || opt.label
+}
+const modeType = (m) => {
+  const types = { replace_leaf: 'success', replace_branch: 'warning', replace_style: 'primary' }
+  return types[m] || 'info'
+}
 const formatDate = (d) => {
   if (!d) return '—'
   try { return new Date(d).toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) } catch { return d }
@@ -478,6 +504,7 @@ const deleteRecord = (row) => {
 onMounted(() => {
   fetchRecords()
   fetchSkeletons()
+  fetchOptions()
 })
 </script>
 

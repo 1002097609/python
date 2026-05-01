@@ -1,17 +1,18 @@
 """
-选项数据初始化种子脚本
+选项数据初始化种子脚本（Upsert 模式）
 
 用途：
   将系统中所有下拉框的默认选项数据写入数据库。
-  包括：平台、品类、风格、策略、骨架类型、裂变模式、金句、数据引用、视觉描述等。
+  包括：平台、品类、风格、策略、骨架类型、裂变模式、金句、数据引用、视觉描述、
+        裂变记录状态、素材状态等共 12 个分组。
 
 用法：
   方式1（推荐）: python -c "from backend.seed_options import seed; seed()"
   方式2: python backend/seed_options.py
 
 注意：
-  seed() 会先清空 option 表中的所有现有数据，再重新插入默认值。
-  如需保留已有数据并追加新数据，请直接调用 db.add(Option(**item)) 而不调用 delete。
+  seed() 使用 upsert（merge）模式：对每条默认选项，若 (group_key, value) 已存在则
+  更新 label/sort_order，不存在则插入。不会删除用户手动添加的自定义选项。
 """
 from backend.database import SessionLocal
 from backend.models.option import Option
@@ -26,7 +27,7 @@ from backend.models.option import Option
 #   - value:    程序内部使用的实际值（通常与 label 相同，英文标识则不同）
 #   - sort_order: 排序权重，数值越小越靠前
 #
-# 当前共 86 条数据，覆盖 9 个分组
+# 覆盖 12 个分组
 # ============================================================
 
 DEFAULT_OPTIONS = [
@@ -84,116 +85,145 @@ DEFAULT_OPTIONS = [
     {"group_key": "skeleton_type", "label": "教程步骤型", "value": "教程步骤型", "sort_order": 5},
 
     # ----------------------------------------------------------
+    # 裂变记录状态 (fission_status) — 素材裂变产出的状态流转
+    # ----------------------------------------------------------
+    {"group_key": "fission_status", "label": "草稿", "value": "0", "sort_order": 1},
+    {"group_key": "fission_status", "label": "待审核", "value": "1", "sort_order": 2},
+    {"group_key": "fission_status", "label": "已采用", "value": "2", "sort_order": 3},
+    {"group_key": "fission_status", "label": "已投放", "value": "3", "sort_order": 4},
+
+    # ----------------------------------------------------------
+    # 素材状态 (material_status) — 素材的拆解状态流转
+    # ----------------------------------------------------------
+    {"group_key": "material_status", "label": "未拆解", "value": "0", "sort_order": 1},
+    {"group_key": "material_status", "label": "已拆解", "value": "1", "sort_order": 2},
+    {"group_key": "material_status", "label": "已归档", "value": "2", "sort_order": 3},
+
+    # ----------------------------------------------------------
     # 裂变模式 (fission_mode) — 素材裂变的三种策略
     # ----------------------------------------------------------
     # replace_leaf:   换叶子 — 替换 L1(主题)+L5(表达)，骨架不变，效果保留约 85%
     # replace_style:  换表达 — 替换 L2(策略)+L5(表达)，骨架不变，效果保留约 70%
     # replace_branch: 换枝杈 — 替换 L3(结构)+L4(元素)，主题不变，效果保留约 65%
-    {"group_key": "fission_mode", "label": "换叶子（同构异内容）", "value": "replace_leaf", "sort_order": 1},
-    {"group_key": "fission_mode", "label": "换表达（跨风格移植）", "value": "replace_style", "sort_order": 2},
-    {"group_key": "fission_mode", "label": "换枝杈（同内容异结构）", "value": "replace_branch", "sort_order": 3},
+    {"group_key": "fission_mode", "label": "换叶子|🍃|效果保留85%", "value": "replace_leaf", "sort_order": 1},
+    {"group_key": "fission_mode", "label": "换表达|🎨|效果保留70%", "value": "replace_style", "sort_order": 2},
+    {"group_key": "fission_mode", "label": "换枝杈|🌿|效果保留65%", "value": "replace_branch", "sort_order": 3},
 
     # ----------------------------------------------------------
     # 金句预设 (golden_sentence) — 各行业常用营销金句
     # 覆盖护肤、母婴、零食、户外等品类
     # ----------------------------------------------------------
-    {"group_key": "golden_sentence", "label": "含酒精香精的面霜，敏感肌千万别碰", "value": "含酒精香精的面霜，敏感肌千万别碰", "sort_order": 1},
-    {"group_key": "golden_sentence", "label": "神经酰胺+胆固醇=屏障修复黄金搭档", "value": "神经酰胺+胆固醇=屏障修复黄金搭档", "sort_order": 2},
-    {"group_key": "golden_sentence", "label": "硅酮填平毛孔是物理遮盖，不是真的收缩毛孔", "value": "硅酮填平毛孔是物理遮盖，不是真的收缩毛孔", "sort_order": 3},
-    {"group_key": "golden_sentence", "label": "水杨酸控油还能祛痘，油痘肌亲妈", "value": "水杨酸控油还能祛痘，油痘肌亲妈", "sort_order": 4},
-    {"group_key": "golden_sentence", "label": "第一口辅食一定是高铁米粉", "value": "第一口辅食一定是高铁米粉", "sort_order": 5},
-    {"group_key": "golden_sentence", "label": "从稀到稠，从少到多，每次只加一种新食物", "value": "从稀到稠，从少到多，每次只加一种新食物", "sort_order": 6},
-    {"group_key": "golden_sentence", "label": "热水一浇就能吃，懒人福音", "value": "热水一浇就能吃，懒人福音", "sort_order": 7},
-    {"group_key": "golden_sentence", "label": "打工人的快乐就是这么简单", "value": "打工人的快乐就是这么简单", "sort_order": 8},
-    {"group_key": "golden_sentence", "label": "早八人再也不用空腹上课了", "value": "早八人再也不用空腹上课了", "sort_order": 9},
-    {"group_key": "golden_sentence", "label": "一口下去精神百倍", "value": "一口下去精神百倍", "sort_order": 10},
-    {"group_key": "golden_sentence", "label": "90%的新手都踩过这5个坑", "value": "90%的新手都踩过这5个坑", "sort_order": 11},
-    {"group_key": "golden_sentence", "label": "硅尼龙帐篷，轻到可以塞进书包", "value": "硅尼龙帐篷，轻到可以塞进书包", "sort_order": 12},
-    {"group_key": "golden_sentence", "label": "鹅绒睡袋，保暖重量比的天花板", "value": "鹅绒睡袋，保暖重量比的天花板", "sort_order": 13},
-    {"group_key": "golden_sentence", "label": "氨基酸洁面是油皮的最爱", "value": "氨基酸洁面是油皮的最爱", "sort_order": 14},
-    {"group_key": "golden_sentence", "label": "粉底不是涂越多越好，轻薄才是王道", "value": "粉底不是涂越多越好，轻薄才是王道", "sort_order": 15},
-    {"group_key": "golden_sentence", "label": "眉头浅眉尾深，自然又立体", "value": "眉头浅眉尾深，自然又立体", "sort_order": 16},
+    {"group_key": "golden_sentence", "label": "这个细节99%的人都忽略了", "value": "这个细节99%的人都忽略了", "sort_order": 1},
+    {"group_key": "golden_sentence", "label": "用了3年才发现这个方法", "value": "用了3年才发现这个方法", "sort_order": 2},
+    {"group_key": "golden_sentence", "label": "花了一个月测试出来的结论", "value": "花了一个月测试出来的结论", "sort_order": 3},
+    {"group_key": "golden_sentence", "label": "对比了10款之后的选择", "value": "对比了10款之后的选择", "sort_order": 4},
+    {"group_key": "golden_sentence", "label": "后悔没早点知道", "value": "后悔没早点知道", "sort_order": 5},
+    {"group_key": "golden_sentence", "label": "别再踩我踩过的坑了", "value": "别再踩我踩过的坑了", "sort_order": 6},
+    {"group_key": "golden_sentence", "label": "效果因人而异，但值得一试", "value": "效果因人而异，但值得一试", "sort_order": 7},
+    {"group_key": "golden_sentence", "label": "不是广告，纯分享", "value": "不是广告，纯分享", "sort_order": 8},
+    {"group_key": "golden_sentence", "label": "性价比天花板", "value": "性价比天花板", "sort_order": 9},
+    {"group_key": "golden_sentence", "label": "闭眼入不会错", "value": "闭眼入不会错", "sort_order": 10},
+    {"group_key": "golden_sentence", "label": "回购了5次的好物", "value": "回购了5次的好物", "sort_order": 11},
+    {"group_key": "golden_sentence", "label": "用了就回不去了", "value": "用了就回不去了", "sort_order": 12},
+    {"group_key": "golden_sentence", "label": "平价替代天花板", "value": "平价替代天花板", "sort_order": 13},
+    {"group_key": "golden_sentence", "label": "专业人士都在用", "value": "专业人士都在用", "sort_order": 14},
+    {"group_key": "golden_sentence", "label": "被问了无数次的好物", "value": "被问了无数次的好物", "sort_order": 15},
+    {"group_key": "golden_sentence", "label": "一次就见效", "value": "一次就见效", "sort_order": 16},
 
     # ----------------------------------------------------------
     # 数据引用预设 (data_ref) — 各行业常用数据论据
     # 用于增强素材说服力
     # ----------------------------------------------------------
-    {"group_key": "data_ref", "label": "持妆8小时后，T区出油量减少60%", "value": "持妆8小时后，T区出油量减少60%", "sort_order": 1},
-    {"group_key": "data_ref", "label": "连续使用28天，皮肤含水量提升40%", "value": "连续使用28天，皮肤含水量提升40%", "sort_order": 2},
-    {"group_key": "data_ref", "label": "连续使用28天，泛红减少45%", "value": "连续使用28天，泛红减少45%", "sort_order": 3},
-    {"group_key": "data_ref", "label": "6个月宝宝每天需要11mg铁", "value": "6个月宝宝每天需要11mg铁", "sort_order": 4},
-    {"group_key": "data_ref", "label": "每样新食物观察3天不过敏再加下一样", "value": "每样新食物观察3天不过敏再加下一样", "sort_order": 5},
-    {"group_key": "data_ref", "label": "1-3岁每天需要约1000大卡热量", "value": "1-3岁每天需要约1000大卡热量", "sort_order": 6},
-    {"group_key": "data_ref", "label": "均价3块钱一顿", "value": "均价3块钱一顿", "sort_order": 7},
-    {"group_key": "data_ref", "label": "保质期长达12个月", "value": "保质期长达12个月", "sort_order": 8},
-    {"group_key": "data_ref", "label": "含糖量低于5g", "value": "含糖量低于5g", "sort_order": 9},
-    {"group_key": "data_ref", "label": "热量仅100大卡", "value": "热量仅100大卡", "sort_order": 10},
-    {"group_key": "data_ref", "label": "整套装备控制在5kg以内", "value": "整套装备控制在5kg以内", "sort_order": 11},
-    {"group_key": "data_ref", "label": "硅尼龙比普通尼龙轻40%", "value": "硅尼龙比普通尼龙轻40%", "sort_order": 12},
-    {"group_key": "data_ref", "label": "碳纤维登山杖，每根仅180g", "value": "碳纤维登山杖，每根仅180g", "sort_order": 13},
-    {"group_key": "data_ref", "label": "SPF50+ PA++++ 适合户外暴晒场景", "value": "SPF50+ PA++++ 适合户外暴晒场景", "sort_order": 14},
+    {"group_key": "data_ref", "label": "连续使用28天，效果显著提升", "value": "连续使用28天，效果显著提升", "sort_order": 1},
+    {"group_key": "data_ref", "label": "对比同类产品，性价比高出30%", "value": "对比同类产品，性价比高出30%", "sort_order": 2},
+    {"group_key": "data_ref", "label": "90%的用户反馈有效", "value": "90%的用户反馈有效", "sort_order": 3},
+    {"group_key": "data_ref", "label": "经过3个月实测验证", "value": "经过3个月实测验证", "sort_order": 4},
+    {"group_key": "data_ref", "label": "每单位成本降低40%", "value": "每单位成本降低40%", "sort_order": 5},
+    {"group_key": "data_ref", "label": "满意度评分4.8/5.0", "value": "满意度评分4.8/5.0", "sort_order": 6},
+    {"group_key": "data_ref", "label": "复购率达到65%", "value": "复购率达到65%", "sort_order": 7},
+    {"group_key": "data_ref", "label": "使用周期长达12个月", "value": "使用周期长达12个月", "sort_order": 8},
+    {"group_key": "data_ref", "label": "比传统方案节省50%时间", "value": "比传统方案节省50%时间", "sort_order": 9},
+    {"group_key": "data_ref", "label": "有效成分含量达95%", "value": "有效成分含量达95%", "sort_order": 10},
+    {"group_key": "data_ref", "label": "0不良反应报告", "value": "0不良反应报告", "sort_order": 11},
+    {"group_key": "data_ref", "label": "平均见效时间7天", "value": "平均见效时间7天", "sort_order": 12},
+    {"group_key": "data_ref", "label": "适用于99%的肤质/场景", "value": "适用于99%的肤质/场景", "sort_order": 13},
+    {"group_key": "data_ref", "label": "行业推荐标准", "value": "行业推荐标准", "sort_order": 14},
 
     # ----------------------------------------------------------
     # 视觉描述预设 (visual_desc) — 素材拍摄/呈现的视觉建议
     # ----------------------------------------------------------
-    {"group_key": "visual_desc", "label": "质地特写镜头", "value": "质地特写镜头", "sort_order": 1},
-    {"group_key": "visual_desc", "label": "上脸推开效果", "value": "上脸推开效果", "sort_order": 2},
-    {"group_key": "visual_desc", "label": "前后对比图", "value": "前后对比图", "sort_order": 3},
-    {"group_key": "visual_desc", "label": "半脸对比效果", "value": "半脸对比效果", "sort_order": 4},
-    {"group_key": "visual_desc", "label": "8小时后持妆对比", "value": "8小时后持妆对比", "sort_order": 5},
-    {"group_key": "visual_desc", "label": "米粉冲泡对比图", "value": "米粉冲泡对比图", "sort_order": 6},
-    {"group_key": "visual_desc", "label": "不同月龄食物质地展示", "value": "不同月龄食物质地展示", "sort_order": 7},
-    {"group_key": "visual_desc", "label": "过敏红疹警示图", "value": "过敏红疹警示图", "sort_order": 8},
-    {"group_key": "visual_desc", "label": "速食开箱合集", "value": "速食开箱合集", "sort_order": 9},
-    {"group_key": "visual_desc", "label": "冲泡过程快剪", "value": "冲泡过程快剪", "sort_order": 10},
-    {"group_key": "visual_desc", "label": "宿舍桌面场景", "value": "宿舍桌面场景", "sort_order": 11},
-    {"group_key": "visual_desc", "label": "红黑榜对比表格", "value": "红黑榜对比表格", "sort_order": 12},
-    {"group_key": "visual_desc", "label": "成分表特写", "value": "成分表特写", "sort_order": 13},
-    {"group_key": "visual_desc", "label": "上脸试用展示", "value": "上脸试用展示", "sort_order": 14},
-    {"group_key": "visual_desc", "label": "错误vs正确对比图", "value": "错误vs正确对比图", "sort_order": 15},
-    {"group_key": "visual_desc", "label": "新手化妆前后对比", "value": "新手化妆前后对比", "sort_order": 16},
-    {"group_key": "visual_desc", "label": "工具使用演示", "value": "工具使用演示", "sort_order": 17},
-    {"group_key": "visual_desc", "label": "装备全家福", "value": "装备全家福", "sort_order": 18},
-    {"group_key": "visual_desc", "label": "重量对比展示", "value": "重量对比展示", "sort_order": 19},
-    {"group_key": "visual_desc", "label": "户外使用场景", "value": "户外使用场景", "sort_order": 20},
+    {"group_key": "visual_desc", "label": "产品全景展示", "value": "产品全景展示", "sort_order": 1},
+    {"group_key": "visual_desc", "label": "使用前后对比", "value": "使用前后对比", "sort_order": 2},
+    {"group_key": "visual_desc", "label": "细节特写镜头", "value": "细节特写镜头", "sort_order": 3},
+    {"group_key": "visual_desc", "label": "步骤分解演示", "value": "步骤分解演示", "sort_order": 4},
+    {"group_key": "visual_desc", "label": "场景化使用展示", "value": "场景化使用展示", "sort_order": 5},
+    {"group_key": "visual_desc", "label": "成分/参数特写", "value": "成分/参数特写", "sort_order": 6},
+    {"group_key": "visual_desc", "label": "开箱体验", "value": "开箱体验", "sort_order": 7},
+    {"group_key": "visual_desc", "label": "多角度展示", "value": "多角度展示", "sort_order": 8},
+    {"group_key": "visual_desc", "label": "真人试用展示", "value": "真人试用展示", "sort_order": 9},
+    {"group_key": "visual_desc", "label": "数据图表可视化", "value": "数据图表可视化", "sort_order": 10},
+    {"group_key": "visual_desc", "label": "错误vs正确对比", "value": "错误vs正确对比", "sort_order": 11},
+    {"group_key": "visual_desc", "label": "时间线对比", "value": "时间线对比", "sort_order": 12},
+    {"group_key": "visual_desc", "label": "同类产品横向对比", "value": "同类产品横向对比", "sort_order": 13},
+    {"group_key": "visual_desc", "label": "使用场景合集", "value": "使用场景合集", "sort_order": 14},
+    {"group_key": "visual_desc", "label": "效果延时摄影", "value": "效果延时摄影", "sort_order": 15},
+    {"group_key": "visual_desc", "label": "工具/道具展示", "value": "工具/道具展示", "sort_order": 16},
+    {"group_key": "visual_desc", "label": "文字标注说明", "value": "文字标注说明", "sort_order": 17},
+    {"group_key": "visual_desc", "label": "分屏对比效果", "value": "分屏对比效果", "sort_order": 18},
+    {"group_key": "visual_desc", "label": "用户反馈截图", "value": "用户反馈截图", "sort_order": 19},
+    {"group_key": "visual_desc", "label": "品牌标识展示", "value": "品牌标识展示", "sort_order": 20},
 ]
 
 
 def seed():
     """
-    执行数据初始化
+    执行数据初始化（Upsert / Merge 模式）
 
     流程：
     1. 创建数据库会话
-    2. 清空 option 表所有现有数据（DELETE FROM option）
-    3. 批量插入 DEFAULT_OPTIONS 中的所有默认数据
-    4. 提交事务
+    2. 遍历 DEFAULT_OPTIONS 中的每条默认数据：
+       a. 根据 (group_key, value) 查询是否已存在
+       b. 若存在：更新 label 和 sort_order
+       c. 若不存在：插入新记录
+    3. 提交事务
 
     异常处理：
-    - 如果插入过程中发生任何错误，回滚事务并打印错误信息
+    - 如果操作过程中发生任何错误，回滚事务并打印错误信息
     - 数据库连接在 finally 块中确保关闭
 
     Note:
-        此函数是幂等操作——多次执行结果相同（先清空再重建）。
+        此函数是幂等操作——多次执行结果相同。
+        不会删除用户手动添加的自定义选项（非 DEFAULT_OPTIONS 中的记录不受影响）。
     """
     db = SessionLocal()
     try:
-        # Step 1: 清空旧数据，确保每次初始化都是干净的状态
-        db.query(Option).delete()
+        inserted = 0
+        updated = 0
 
-        # Step 2: 批量插入所有默认选项
         for opt in DEFAULT_OPTIONS:
-            db.add(Option(**opt))
+            # 查找是否已存在相同 (group_key, value) 的记录
+            existing = (
+                db.query(Option)
+                .filter(Option.group_key == opt["group_key"], Option.value == opt["value"])
+                .first()
+            )
 
-        # Step 3: 提交事务，一次性写入所有数据
+            if existing:
+                # 已存在：更新 label 和 sort_order
+                existing.label = opt["label"]
+                existing.sort_order = opt["sort_order"]
+                updated += 1
+            else:
+                # 不存在：插入新记录
+                db.add(Option(**opt))
+                inserted += 1
+
         db.commit()
-        print(f"[OK] 已初始化 {len(DEFAULT_OPTIONS)} 条选项数据")
+        print(f"[OK] 已初始化选项数据：插入 {inserted} 条，更新 {updated} 条，共 {len(DEFAULT_OPTIONS)} 条")
     except Exception as e:
-        # 发生异常时回滚，避免数据库处于不一致状态
         db.rollback()
         print(f"[ERROR] {e}")
     finally:
-        # 无论成功还是失败，都要关闭数据库连接
         db.close()
 
 

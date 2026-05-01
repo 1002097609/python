@@ -18,14 +18,14 @@
         <div class="stat-icon">⏳</div>
         <div class="stat-info">
           <div class="stat-num">{{ pendingCount }}</div>
-          <div class="stat-label">待拆解</div>
+          <div class="stat-label">{{ statusText(0) }}</div>
         </div>
       </div>
       <div class="stat-card stat-done" :class="{ active: filterStatus === 1 }" @click="filterStatus = 1">
         <div class="stat-icon">✅</div>
         <div class="stat-info">
           <div class="stat-num">{{ doneCount }}</div>
-          <div class="stat-label">已拆解</div>
+          <div class="stat-label">{{ statusText(1) }}</div>
         </div>
       </div>
     </div>
@@ -128,7 +128,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api from '../api'
+import api, { getOptions } from '../api'
 
 const router = useRouter()
 
@@ -138,6 +138,19 @@ const filterPlatform = ref('')
 const filterStatus = ref('')
 const detailVisible = ref(false)
 const currentMaterial = ref(null)
+
+const options = ref({
+  material_status: [],
+})
+
+const fetchOptions = async () => {
+  try {
+    const data = await getOptions()
+    options.value = data
+  } catch (e) {
+    console.error('加载选项失败', e)
+  }
+}
 
 const platforms = computed(() => {
   const set = new Set(materials.value.map(m => m.platform).filter(Boolean))
@@ -158,8 +171,14 @@ const filteredMaterials = computed(() => {
 const pendingCount = computed(() => materials.value.filter(m => m.status === 0).length)
 const doneCount = computed(() => materials.value.filter(m => m.status === 1).length)
 
-const statusType = (s) => s === 0 ? 'info' : s === 1 ? 'success' : 'warning'
-const statusText = (s) => ['未拆解', '已拆解', '已归档'][s] || '未知'
+const statusText = (s) => {
+  const opt = (options.value.material_status || []).find(o => Number(o.value) === s)
+  return opt ? opt.label : '未知'
+}
+const statusType = (s) => {
+  const types = { 0: 'info', 1: 'success', 2: 'warning' }
+  return types[s] || 'info'
+}
 const formatDate = (d) => {
   if (!d) return '—'
   try { return new Date(d).toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) } catch { return d }
@@ -204,7 +223,10 @@ const handleDelete = (row) => {
   }).catch(() => {})
 }
 
-onMounted(fetchMaterials)
+onMounted(() => {
+  fetchMaterials()
+  fetchOptions()
+})
 </script>
 
 <style scoped>

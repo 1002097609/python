@@ -250,11 +250,7 @@ const dismantleForm = reactive({
   l1_core_point: '',
   l2_strategy: [],
   l2_emotion: '',
-  l3_structure: [
-    { name: '开头', function: '痛点共鸣', ratio: 15 },
-    { name: '主体', function: '价值输出', ratio: 60 },
-    { name: '结尾', function: '引导行动', ratio: 25 },
-  ],
+  l3_structure: [],
   l4_elements: { title_formula: '', hook: '', transition: '', interaction: '' },
   l5_expressions: { golden_sentences: [], data_refs: [], visual_desc: [] },
 })

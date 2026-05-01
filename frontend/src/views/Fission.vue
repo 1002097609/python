@@ -183,15 +183,19 @@ const options = ref({
 })
 
 const fissionModes = computed(() => {
-  const icons = { replace_leaf: '🍃', replace_style: '🎨', replace_branch: '🌿' }
-  const rates = { replace_leaf: '~85%', replace_style: '~70%', replace_branch: '~65%' }
-  return (options.value.fission_mode || []).map((m) => ({
-    label: m.label,
-    value: m.value,
-    desc: m.desc || '',
-    icon: icons[m.value] || '⚡',
-    rate: rates[m.value] || '',
-  }))
+  // label 格式: "名称|图标|描述"，如 "换叶子|🍃|效果保留85%"
+  return (options.value.fission_mode || []).map((m) => {
+    const parts = (m.label || '').split('|')
+    const displayName = parts[0] || m.label
+    const icon = parts[1] || '⚡'
+    const desc = parts[2] || m.desc || ''
+    return {
+      label: displayName,
+      value: m.value,
+      icon,
+      desc,
+    }
+  })
 })
 
 const fissionForm = reactive({
