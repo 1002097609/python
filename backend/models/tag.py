@@ -16,6 +16,7 @@ MaterialTag 主要字段：
 """
 
 from sqlalchemy import Column, Integer, String, UniqueConstraint, ForeignKey
+from sqlalchemy.orm import relationship
 from backend.database import Base
 
 
@@ -29,6 +30,11 @@ class Tag(Base):
       - style: 风格标签（专业感/亲和力/紧迫感等）
       - strategy: 策略标签（共鸣型/成分党/对比测评等）
 
+    数据模型说明：
+      - option_id 不为空：标签是对 option 表中某条记录的引用。
+        name 和 type 从 option 冗余存储，避免每次查询都需要 JOIN option 表。
+      - option_id 为空：纯用户自定义标签，不与 option 关联。
+
     同一名称在不同 type 下可存在不同记录（如 name="抖音" type="platform"
     和 name="抖音" type="style" 可以共存），通过联合唯一约束保证
     同 type 下不出现重复名称。
@@ -40,10 +46,19 @@ class Tag(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # 标签显示名称，如"抖音"、"护肤"、"专业感"等
+    # 当 option_id 不为空时，此字段从 option.label 冗余复制
     name = Column(String(50), nullable=False)
 
     # 标签类型分类，用于区分不同维度的标签体系
+    # 当 option_id 不为空时，此字段从 option.group_key 冗余复制
     type = Column(String(20), comment="标签类型：platform/category/style/strategy")
+
+    # 关联的 option 表记录 ID（可为空）
+    # 不为空时，name 和 type 从 option 冗余存储
+    option_id = Column(Integer, ForeignKey("option.id"), nullable=True, comment="关联的 option 记录 ID")
+
+    # 与 option 表的关联关系，通过 option_id 外键访问关联的 option 对象
+    option = relationship("Option", backref="tags")
 
     # 联合唯一约束：同一 type 下的 name 不能重复
     __table_args__ = (

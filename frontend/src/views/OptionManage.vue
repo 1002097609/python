@@ -35,7 +35,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openEditDialog(row)">编辑</el-button>
             <el-button
@@ -46,6 +46,7 @@
             >
               {{ row.is_active ? '禁用' : '启用' }}
             </el-button>
+            <el-button type="success" link size="small" @click="handleCreateTag(row)">🏷️ 创建为标签</el-button>
             <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -90,7 +91,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getOptions, getOptionsByGroup, createOption, updateOption, deleteOption } from '../api'
+import api, { getOptions, getOptionsByGroup, createOption, updateOption, deleteOption, createTagFromOption } from '../api'
 
 const allOptions = ref([])
 const groups = ref([])
@@ -183,6 +184,19 @@ const toggleActive = async (row) => {
     ElMessage.success(row.is_active ? '已启用' : '已禁用')
   } catch (e) {
     ElMessage.error('操作失败')
+  }
+}
+
+const handleCreateTag = async (row) => {
+  try {
+    await createTagFromOption(row.id)
+    ElMessage.success(`「${row.label}」已创建为标签`)
+  } catch (e) {
+    if (e.response?.status === 409) {
+      ElMessage.warning('该选项已创建为标签，无需重复创建')
+    } else {
+      ElMessage.error('创建标签失败: ' + (e.response?.data?.detail || e.message))
+    }
   }
 }
 

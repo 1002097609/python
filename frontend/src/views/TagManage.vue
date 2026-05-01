@@ -8,15 +8,33 @@
     <!-- 新增标签 -->
     <div class="card add-card">
       <div class="add-form">
-        <el-input v-model="newTag.name" placeholder="输入标签名称" style="width:220px" />
-        <el-select v-model="newTag.type" placeholder="选择类型" style="width:160px">
-          <el-option label="平台 (platform)" value="platform" />
-          <el-option label="品类 (category)" value="category" />
-          <el-option label="风格 (style)" value="style" />
-          <el-option label="策略 (strategy)" value="strategy" />
-        </el-select>
-        <el-button type="primary" @click="handleAdd" :loading="submitting" :disabled="!newTag.name.trim()">
+        <!-- 方式1：直接输入 -->
+        <template v-if="!useOptionImport">
+          <el-input v-model="newTag.name" placeholder="输入标签名称" style="width:220px" />
+          <el-select v-model="newTag.type" placeholder="选择类型" style="width:160px">
+            <el-option label="平台 (platform)" value="platform" />
+            <el-option label="品类 (category)" value="category" />
+            <el-option label="风格 (style)" value="style" />
+            <el-option label="策略 (strategy)" value="strategy" />
+          </el-select>
+        </template>
+
+        <!-- 方式2：从 option 导入 -->
+        <template v-else>
+          <el-select v-model="newTag.option_id" placeholder="选择选项导入为标签" filterable style="width:300px">
+            <el-option-group v-for="group in optionGroups" :key="group.groupKey" :label="group.label">
+              <el-option v-for="opt in group.options" :key="opt.id" :label="`${opt.label} (${opt.group_key})`" :value="opt.id" />
+            </el-option-group>
+          </el-select>
+        </template>
+
+        <el-button type="primary" @click="handleAdd" :loading="submitting" :disabled="!canAdd">
           添加标签
+        </el-button>
+
+        <!-- 切换导入方式 -->
+        <el-button link type="info" @click="useOptionImport = !useOptionImport">
+          {{ useOptionImport ? '✏️ 手动输入' : '📋 从选项导入' }}
         </el-button>
       </div>
     </div>
@@ -63,6 +81,7 @@
               @close="handleDelete(tag)"
             >
               {{ tag.name }}
+              <span v-if="tag.option_id" class="option-linked" title="已关联选项">🔗</span>
             </el-tag>
             <el-button type="primary" link size="small" @click="openEdit(tag)">编辑</el-button>
           </template>
@@ -78,15 +97,18 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getTags } from '../api'
+import api, { getTags, getOptionsByGroup, createTag, updateTag, deleteTag, createTagFromOption } from '../api'
 
 const allTags = ref([])
+const allOptions = ref([])
 const submitting = ref(false)
 const editingId = ref(null)
+const useOptionImport = ref(false)
 
 const newTag = reactive({
   name: '',
   type: '',
+  option_id: null,
 })
 
 const editForm = reactive({
@@ -112,6 +134,33 @@ const tagSections = computed(() => {
 
 const totalCount = computed(() => allTags.value.length)
 
+// 按分组组织的 option 列表（用于"从选项导入"下拉框）
+const optionGroups = computed(() => {
+  const groupMap = {
+    platform: { label: '平台', options: [] },
+    category: { label: '品类', options: [] },
+    style: { label: '风格', options: [] },
+    strategy: { label: '策略', options: [] },
+  }
+  for (const opt of allOptions.value) {
+    if (groupMap[opt.group_key]) {
+      groupMap[opt.group_key].options.push(opt)
+    }
+  }
+  return Object.entries(groupMap).map(([key, val]) => ({
+    groupKey: key,
+    label: val.label,
+    options: val.options,
+  })).filter(g => g.options.length > 0)
+})
+
+const canAdd = computed(() => {
+  if (useOptionImport.value) {
+    return !!newTag.option_id
+  }
+  return !!newTag.name.trim() && !!newTag.type
+})
+
 const fetchTags = async () => {
   try {
     const data = await getTags()
@@ -121,29 +170,54 @@ const fetchTags = async () => {
   }
 }
 
-const handleAdd = async () => {
-  if (!newTag.name.trim()) {
-    ElMessage.warning('请输入标签名称')
-    return
-  }
-  if (!newTag.type) {
-    ElMessage.warning('请选择标签类型')
-    return
-  }
-  submitting.value = true
+const fetchOptions = async () => {
   try {
-    const { data } = await api.post('/tag/', {
-      name: newTag.name.trim(),
-      type: newTag.type,
-    })
-    allTags.value.push(data)
-    ElMessage.success(`标签「${newTag.name}」添加成功`)
-    newTag.name = ''
-    newTag.type = ''
+    const data = await getOptionsByGroup()
+    allOptions.value = data
   } catch (e) {
-    ElMessage.error('添加失败: ' + (e.response?.data?.detail || e.message))
+    console.error('加载选项失败', e)
   }
-  submitting.value = false
+}
+
+const handleAdd = async () => {
+  if (useOptionImport.value) {
+    // 从 option 导入
+    if (!newTag.option_id) {
+      ElMessage.warning('请选择要导入的选项')
+      return
+    }
+    submitting.value = true
+    try {
+      await createTagFromOption(newTag.option_id)
+      ElMessage.success('标签创建成功')
+      newTag.option_id = null
+      await fetchTags()
+    } catch (e) {
+      ElMessage.error('添加失败: ' + (e.response?.data?.detail || e.message))
+    }
+    submitting.value = false
+  } else {
+    // 直接创建
+    if (!newTag.name.trim()) {
+      ElMessage.warning('请输入标签名称')
+      return
+    }
+    if (!newTag.type) {
+      ElMessage.warning('请选择标签类型')
+      return
+    }
+    submitting.value = true
+    try {
+      await createTag({ name: newTag.name.trim(), type: newTag.type })
+      ElMessage.success(`标签「${newTag.name}」添加成功`)
+      newTag.name = ''
+      newTag.type = ''
+      await fetchTags()
+    } catch (e) {
+      ElMessage.error('添加失败: ' + (e.response?.data?.detail || e.message))
+    }
+    submitting.value = false
+  }
 }
 
 const openEdit = (tag) => {
@@ -168,7 +242,7 @@ const handleSaveEdit = async (tag) => {
     return
   }
   try {
-    const { data } = await api.put(`/tag/${tag.id}`, {
+    const { data } = await updateTag(tag.id, {
       name: editForm.name.trim(),
       type: editForm.type,
     })
@@ -188,7 +262,7 @@ const handleDelete = (tag) => {
     cancelButtonText: '取消',
   }).then(async () => {
     try {
-      await api.delete(`/tag/${tag.id}`)
+      await deleteTag(tag.id)
       allTags.value = allTags.value.filter(t => t.id !== tag.id)
       ElMessage.success('标签已删除')
     } catch (e) {
@@ -199,6 +273,7 @@ const handleDelete = (tag) => {
 
 onMounted(() => {
   fetchTags()
+  fetchOptions()
 })
 </script>
 
@@ -239,6 +314,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* 分组区块 */
@@ -294,6 +370,13 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 选项关联标识 */
+.option-linked {
+  font-size: 10px;
+  margin-left: 4px;
+  opacity: .7;
 }
 
 /* 空状态 */

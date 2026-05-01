@@ -98,4 +98,27 @@ export async function removeMaterialTag(materialId, tagId) {
   await api.delete(`/tag/material/${materialId}/tags/${tagId}`)
 }
 
+// 从已有 option 创建标签
+export async function createTagFromOption(optionId) {
+  const { data } = await api.post('/tag/from-option', { option_id: optionId })
+  return data
+}
+
+// 创建标签（支持 option_id）
+export async function createTag(payload) {
+  const { data } = await api.post('/tag/', payload)
+  return data
+}
+
+// 更新标签（支持 option_id）
+export async function updateTag(tagId, payload) {
+  const { data } = await api.put(`/tag/${tagId}`, payload)
+  return data
+}
+
+// 删除标签
+export async function deleteTag(tagId) {
+  await api.delete(`/tag/${tagId}`)
+}
+
 export default api

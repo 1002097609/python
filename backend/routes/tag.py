@@ -8,12 +8,18 @@
   - style: 风格标签（专业感/亲和力/紧迫感等）
   - strategy: 策略标签（共鸣型/成分党/对比测评等）
 
+数据模型：
+  - tag 表通过 option_id 外键关联 option 表
+  - option_id 不为空时，name 和 type 从 option 冗余存储
+  - option_id 为空时，为纯用户自定义标签
+
 路由列表（注册在 /api/tag/ 下）：
   GET    /api/tag/                        - 标签列表（支持按 type 筛选）
   POST   /api/tag/                        - 创建标签
   PUT    /api/tag/{id}                    - 更新标签
   DELETE /api/tag/{id}                    - 删除标签
   GET    /api/tag/{id}                    - 标签详情
+  POST   /api/tag/from-option             - 从已有 option 创建标签
   GET    /api/tag/material/{material_id}          - 获取素材的标签列表
   POST   /api/tag/material/{material_id}/tags     - 给素材打标签
   DELETE /api/tag/material/{material_id}/tags/{tag_id} - 移除素材标签
@@ -41,11 +47,14 @@ class TagCreate(BaseModel):
     标签创建请求参数模型。
 
     字段说明：
-        name (str): 标签名称，如"抖音"、"护肤"、"专业感"等。
-        type (str): 标签类型，取值：platform / category / style / strategy。
+        name (str):       标签名称，如"抖音"、"护肤"、"专业感"等。
+        type (str):       标签类型，取值：platform / category / style / strategy。
+        option_id (int):  可选。关联的 option 表记录 ID。
+                          若传入，则 name 和 type 从 option 自动填充（忽略传入的 name/type）。
     """
     name: str
     type: str
+    option_id: Optional[int] = None
 
 
 class TagUpdate(BaseModel):
@@ -53,11 +62,14 @@ class TagUpdate(BaseModel):
     标签更新请求参数模型。所有字段均为可选，支持部分更新。
 
     字段说明：
-        name (str): 标签名称。
-        type (str): 标签类型。
+        name (str):       标签名称。
+        type (str):       标签类型。
+        option_id (int):  关联的 option 表记录 ID。
+                          若传入且非空，则 name 和 type 从 option 自动填充。
     """
     name: Optional[str] = None
     type: Optional[str] = None
+    option_id: Optional[int] = None
 
 
 class TagResponse(BaseModel):
@@ -65,13 +77,15 @@ class TagResponse(BaseModel):
     标签响应数据模型。
 
     字段说明：
-        id (int): 标签唯一标识 ID。
-        name (str): 标签名称。
-        type (str): 标签类型。
+        id (int):         标签唯一标识 ID。
+        name (str):       标签名称。
+        type (str):       标签类型。
+        option_id (int):  关联的 option 记录 ID（可为空）。
     """
     id: int
     name: str
     type: str
+    option_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -87,84 +101,14 @@ class MaterialTagCreate(BaseModel):
     tag_id: int
 
 
-# ============================================================
-# Tag ↔ Option 同步辅助函数
-# ============================================================
-
-# tag.type 到 option.group_key 的映射关系
-# tag 的 type 值与 option 的 group_key 完全一致：
-#   "category" -> option group_key="category"
-#   "platform" -> option group_key="platform"
-#   "style"    -> option group_key="style"
-#   "strategy" -> option group_key="strategy"
-SYNC_TYPES = {"category", "platform", "style", "strategy"}
-
-
-def _sync_tag_to_option(db: Session, tag: Tag, old_name: str = None, old_type: str = None):
+class TagFromOption(BaseModel):
     """
-    将标签变更同步到 option 表。
+    从 option 创建标签的请求参数模型。
 
-    逻辑：
-    - 如果 tag.type 不在 SYNC_TYPES 中，不做任何操作
-    - 如果 old_type 存在且与当前 type 不同（类型变更）：
-      删除旧 type 分组下对应的 option 记录
-    - 在 tag.type 对应的 option group_key 下，用 tag.name 做 upsert：
-      存在 (group_key=tag.type, value=old_name或tag.name) 则更新 label
-      不存在则插入新记录
-
-    参数：
-        db:      数据库会话
-        tag:     当前 tag 对象（已包含最新 name 和 type）
-        old_name: 变更前的标签名称（用于定位旧 option 记录）
-        old_type: 变更前的标签类型（用于处理类型变更时的旧 option 清理）
+    字段说明：
+        option_id (int): 必填。要关联的 option 表记录 ID。
     """
-    # 如果旧类型存在且发生了变化，先清理旧类型对应的 option 记录
-    if old_type and old_type != tag.type and old_type in SYNC_TYPES:
-        db.query(Option).filter(
-            Option.group_key == old_type,
-            Option.value == old_name,
-        ).delete()
-
-    # 如果当前类型需要同步到 option 表
-    if tag.type in SYNC_TYPES:
-        # 确定查找条件：优先用 old_name（更新场景），否则用当前 name
-        lookup_value = old_name if old_name and old_name != tag.name else tag.name
-
-        # 查找对应的 option 记录
-        opt = (
-            db.query(Option)
-            .filter(Option.group_key == tag.type, Option.value == lookup_value)
-            .first()
-        )
-
-        if opt:
-            # 已存在：更新 label 和 value
-            opt.label = tag.name
-            opt.value = tag.name
-        else:
-            # 不存在：插入新记录
-            db.add(Option(
-                group_key=tag.type,
-                label=tag.name,
-                value=tag.name,
-                sort_order=0,
-                is_active=1,
-            ))
-
-
-def _remove_tag_option(db: Session, tag: Tag):
-    """
-    删除 tag 时，同步删除 option 表中对应的记录。
-
-    参数：
-        db:  数据库会话
-        tag:  要被删除的 tag 对象
-    """
-    if tag.type in SYNC_TYPES:
-        db.query(Option).filter(
-            Option.group_key == tag.type,
-            Option.value == tag.name,
-        ).delete()
+    option_id: int
 
 
 # ============================================================
@@ -221,28 +165,74 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
     """
     创建新标签。
 
+    支持两种方式：
+    1. 直接传入 name + type 创建（option_id 为空）
+    2. 传入 option_id，自动从 option 表读取 name 和 type
+
     同一 type 下的 name 不能重复（由数据库联合唯一约束保证）。
 
     请求参数：
-        data (TagCreate): 标签创建模型，包含 name 和 type。
+        data (TagCreate): 标签创建模型，包含 name、type 和可选的 option_id。
 
     返回值：
         TagResponse: 创建成功的标签对象。
 
     异常：
         HTTP 409: 当同类型下已存在同名标签时抛出。
+        HTTP 404: 当指定的 option_id 不存在时抛出。
     """
+    # 如果传了 option_id，从 option 表获取 name 和 type
+    if data.option_id:
+        opt = db.query(Option).filter(Option.id == data.option_id).first()
+        if not opt:
+            raise HTTPException(status_code=404, detail=f"选项 ID {data.option_id} 不存在")
+        tag_name = opt.label
+        tag_type = opt.group_key
+    else:
+        tag_name = data.name
+        tag_type = data.type
+
     # 检查同类型下是否已存在同名标签
-    existing = db.query(Tag).filter(Tag.name == data.name, Tag.type == data.type).first()
+    existing = db.query(Tag).filter(Tag.name == tag_name, Tag.type == tag_type).first()
     if existing:
-        raise HTTPException(status_code=409, detail=f"标签「{data.name}」在类型「{data.type}」下已存在")
+        raise HTTPException(status_code=409, detail=f"标签「{tag_name}」在类型「{tag_type}」下已存在")
 
-    tag = Tag(name=data.name, type=data.type)
+    tag = Tag(name=tag_name, type=tag_type, option_id=data.option_id)
     db.add(tag)
-    db.flush()  # 获取 ID 后再同步 option
+    db.commit()
+    db.refresh(tag)
+    return tag
 
-    # 同步到 option 表
-    _sync_tag_to_option(db, tag)
+
+@router.post("/from-option", response_model=TagResponse, status_code=201)
+def create_tag_from_option(data: TagFromOption, db: Session = Depends(get_db)):
+    """
+    从已有的 option 记录创建标签。
+
+    这是一个便捷接口，用于将 option 表中的选项快速创建为标签，
+    确保 option 和 tag 数据一致。
+
+    请求参数：
+        data (TagFromOption): 包含 option_id。
+
+    返回值：
+        TagResponse: 创建成功的标签对象。
+
+    异常：
+        HTTP 404: 当指定的 option_id 不存在时抛出。
+        HTTP 409: 当对应的标签已存在时抛出。
+    """
+    opt = db.query(Option).filter(Option.id == data.option_id).first()
+    if not opt:
+        raise HTTPException(status_code=404, detail=f"选项 ID {data.option_id} 不存在")
+
+    # 检查是否已存在对应的标签
+    existing = db.query(Tag).filter(Tag.name == opt.label, Tag.type == opt.group_key).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"标签「{opt.label}」在类型「{opt.group_key}」下已存在")
+
+    tag = Tag(name=opt.label, type=opt.group_key, option_id=opt.id)
+    db.add(tag)
     db.commit()
     db.refresh(tag)
     return tag
@@ -252,6 +242,10 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
 def update_tag(tag_id: int, data: TagUpdate, db: Session = Depends(get_db)):
     """
     更新标签信息。支持部分更新（仅传入需要修改的字段）。
+
+    特殊逻辑：
+    - 如果更新了 option_id，则自动从关联的 option 读取 name 和 type
+    - 如果清除了 option_id（传入 null），则保持原有 name/type 不变
 
     请求参数：
         tag_id (int): 要更新的标签 ID。
@@ -267,18 +261,19 @@ def update_tag(tag_id: int, data: TagUpdate, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="标签不存在")
 
-    # 记录变更前的值，用于同步 option 表
-    old_name = item.name
-    old_type = item.type
-
-    # 仅更新传入的字段
-    update_data = data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(item, key, value)
-
-    # 同步到 option 表（name 或 type 变更时才需要）
-    if "name" in update_data or "type" in update_data:
-        _sync_tag_to_option(db, item, old_name=old_name, old_type=old_type)
+    # 如果更新了 option_id，从关联的 option 自动填充 name 和 type
+    if data.option_id is not None:
+        opt = db.query(Option).filter(Option.id == data.option_id).first()
+        if not opt:
+            raise HTTPException(status_code=404, detail=f"选项 ID {data.option_id} 不存在")
+        item.name = opt.label
+        item.type = opt.group_key
+        item.option_id = data.option_id
+    else:
+        # 仅更新传入的字段（name 或 type）
+        update_data = data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(item, key, value)
 
     db.commit()
     db.refresh(item)
@@ -291,6 +286,7 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     删除指定标签。
 
     同时会级联删除该标签与所有素材的关联记录（material_tag 表中对应行）。
+    不会影响 option 表中的记录。
 
     请求参数：
         tag_id (int): 要删除的标签 ID。
@@ -304,9 +300,6 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     item = db.query(Tag).filter(Tag.id == tag_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="标签不存在")
-
-    # 同步删除 option 表中对应的记录
-    _remove_tag_option(db, item)
 
     # 级联删除关联表中的记录
     db.query(MaterialTag).filter(MaterialTag.tag_id == tag_id).delete()
@@ -355,7 +348,7 @@ def add_material_tag(material_id: int, data: MaterialTagCreate, db: Session = De
         material_id (int): 素材 ID。
         data (MaterialTagCreate): 包含 tag_id。
 
-    返回值：
+    返回值:
         TagResponse: 关联成功的标签对象。
 
     异常：

@@ -23,6 +23,7 @@ from backend.models.dismantle import Dismantle
 from backend.models.skeleton import Skeleton
 from backend.models.fission import Fission
 from backend.models.effect_data import EffectData
+from backend.models.option import Option
 
 
 # ============================================================
@@ -337,12 +338,20 @@ def seed_all():
         stats = {"tags": 0, "materials": 0, "dismantles": 0, "skeletons": 0, "fissions": 0, "effects": 0, "material_tags": 0}
 
         # --------------------------------------------------
-        # Step 1: 创建标签
+        # Step 1: 创建标签（通过 option 表关联）
         # --------------------------------------------------
+        # 先确保 option 数据已存在（依赖 seed_options.py）
+        # 对于 TAGS 中每个标签，尝试从 option 表查找匹配记录并关联
         for name, tag_type in TAGS:
             existing = db.query(Tag).filter(Tag.name == name, Tag.type == tag_type).first()
             if not existing:
-                db.add(Tag(name=name, type=tag_type))
+                # 查找 option 表中匹配的记录
+                opt = (
+                    db.query(Option)
+                    .filter(Option.group_key == tag_type, Option.value == name, Option.is_active == 1)
+                    .first()
+                )
+                db.add(Tag(name=name, type=tag_type, option_id=opt.id if opt else None))
                 stats["tags"] += 1
         db.commit()
         print(f"[OK] 标签: 新增 {stats['tags']} 条")
