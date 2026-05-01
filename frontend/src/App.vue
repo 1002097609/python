@@ -44,6 +44,7 @@
 
 <script setup>
 const tabs = [
+  { path: '/dashboard', label: '数据统计', icon: '📊' },
   { path: '/', label: '素材拆解', icon: '🔍' },
   { path: '/material-lib', label: '素材库', icon: '📚' },
   { path: '/fission', label: '素材裂变', icon: '⚡' },
