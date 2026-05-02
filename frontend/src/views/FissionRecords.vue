@@ -400,6 +400,39 @@ const effectForm = ref({
   stat_date: '',
 })
 
+// 前端实时计算衍生指标（CTR / CVR / ROI / CPA）
+const autoCalcEffect = () => {
+  const f = effectForm.value
+  const imp = f.impressions || 0
+  const clk = f.clicks || 0
+  const conv = f.conversions || 0
+  const cost = f.cost || 0
+  const rev = f.revenue || 0
+
+  // CTR = clicks / impressions * 100
+  if (imp > 0 && clk > 0) {
+    f.ctr = parseFloat(((clk / imp) * 100).toFixed(2))
+  }
+  // CVR = conversions / clicks * 100
+  if (clk > 0 && conv > 0) {
+    f.cvr = parseFloat(((conv / clk) * 100).toFixed(2))
+  }
+  // ROI = revenue / cost
+  if (cost > 0 && rev > 0) {
+    f.roi = parseFloat((rev / cost).toFixed(2))
+  }
+  // CPA = cost / conversions
+  if (conv > 0 && cost > 0) {
+    f.cpa = parseFloat((cost / conv).toFixed(2))
+  }
+}
+
+// 监听关键字段变化自动重算
+watch(
+  () => [effectForm.value.impressions, effectForm.value.clicks, effectForm.value.conversions, effectForm.value.cost, effectForm.value.revenue],
+  () => { autoCalcEffect() },
+)
+
 // 表单校验规则
 const effectRules = {
   platform: [{ required: true, message: '请选择投放平台', trigger: 'change' }],

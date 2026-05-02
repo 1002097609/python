@@ -72,7 +72,7 @@
                   class="structure-chip"
                 >
                   {{ s.name || s }}
-                  <em v-if="s.ratio">({{ Math.round(s.ratio * 100) }}%)</em>
+                  <em v-if="s.ratio">({{ Math.round(s.ratio) }}%)</em>
                 </span>
               </div>
             </div>
@@ -536,6 +536,7 @@ const showL4Overrides = ref(false)
 
 const fissionForm = reactive({
   skeleton_id: null,
+  source_material_id: null,
   fission_mode: 'replace_leaf',
   new_topic: '',
   new_category: '',
@@ -622,6 +623,13 @@ const fetchSkeletons = async () => {
 
 const onSkeletonChange = (val) => {
   fissionForm.skeleton_id = val
+  // 若尚未设置 source_material_id，自动从骨架的来源素材填充
+  if (!fissionForm.source_material_id) {
+    const sk = skeletons.value.find(s => s.id === val)
+    if (sk && sk.source_material_id) {
+      fissionForm.source_material_id = sk.source_material_id
+    }
+  }
 }
 
 // 内容完整性校验
@@ -691,6 +699,8 @@ const executeFission = async () => {
           replacement: {
             L5: group.L5,
             L4: fissionForm.replacement.L4,
+            L3: fissionForm.replacement.L3,
+            L2: fissionForm.replacement.L2,
           },
         }
         const { data } = await api.post('/fission/', payload)
@@ -1001,13 +1011,22 @@ watch(l3ReplacementSections, (val) => {
 onMounted(() => {
   fetchOptions()
   fetchPresets()
+  // 从路由参数获取 source_material_id（从素材库/骨架库跳转过来时携带）
+  if (route.query.source_material_id) {
+    fissionForm.source_material_id = Number(route.query.source_material_id)
+  }
   fetchSkeletons().then(() => {
     const skeletonId = route.query.skeleton_id
     if (skeletonId) {
       const id = Number(skeletonId)
-      if (skeletons.value.find(s => s.id === id)) {
+      const sk = skeletons.value.find(s => s.id === id)
+      if (sk) {
         selectedSkeleton.value = id
         fissionForm.skeleton_id = id
+        // 若未通过路由参数传入 source_material_id，则使用骨架的来源素材 ID
+        if (!fissionForm.source_material_id && sk.source_material_id) {
+          fissionForm.source_material_id = sk.source_material_id
+        }
       }
     }
   })

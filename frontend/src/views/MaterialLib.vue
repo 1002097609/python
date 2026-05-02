@@ -45,6 +45,7 @@
             <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
           <el-input v-model="searchKeyword" placeholder="搜索标题..." style="width:200px" clearable />
+          <el-button type="primary" size="small" @click="openCreateDialog">➕ 新建素材</el-button>
           <el-button size="small" @click="triggerImportMaterial">📥 导入</el-button>
           <el-dropdown size="small" @command="handleExportMaterial">
             <el-button size="small">📤 导出 ▾</el-button>
@@ -225,6 +226,38 @@
         <el-button type="success" v-if="currentMaterial && currentMaterial.status === 0" @click="goDismantleFromDetail">去拆解 →</el-button>
       </template>
     </el-dialog>
+
+    <!-- 新建素材弹窗 -->
+    <el-dialog v-model="createDialogVisible" title="新建素材" width="560px" destroy-on-close>
+      <el-form :model="createForm" label-width="80px">
+        <el-form-item label="素材标题" required>
+          <el-input v-model="createForm.title" placeholder="例如：秋冬保湿面霜成分测评" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="平台">
+              <el-select v-model="createForm.platform" placeholder="选择平台" style="width:100%">
+                <el-option v-for="opt in options.platform" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="品类">
+              <el-select v-model="createForm.category" placeholder="选择品类" style="width:100%">
+                <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="素材内容" required>
+          <el-input v-model="createForm.content" type="textarea" :rows="8" resize="vertical" placeholder="粘贴完整的素材脚本/文案..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCreateMaterial" :loading="createLoading">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -232,7 +265,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMaterialTag, importMaterials, exportMaterials } from '../api'
+import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMaterialTag, importMaterials, exportMaterials, getOptionsByGroup } from '../api'
 
 const router = useRouter()
 
@@ -262,14 +295,21 @@ const batchStatus = ref(null)
 const batchLoading = ref(false)
 const tableRef = ref(null)
 
+// 新建素材弹窗
+const createDialogVisible = ref(false)
+const createLoading = ref(false)
+const createForm = ref({ title: '', platform: '', category: '', content: '' })
+
 const options = ref({
   material_status: [],
+  platform: [],
+  category: [],
 })
 
 const fetchOptions = async () => {
   try {
     const data = await getOptions()
-    options.value = data
+    options.value = { ...options.value, ...data }
   } catch (e) {
     console.error('加载选项失败', e)
   }
@@ -527,6 +567,33 @@ const handleExportMaterial = (format) => {
   if (filterPlatform.value) params.platform = filterPlatform.value
   if (filterStatus.value !== null) params.status = filterStatus.value
   exportMaterials(format, params)
+}
+
+const openCreateDialog = () => {
+  createForm.value = { title: '', platform: '', category: '', content: '' }
+  createDialogVisible.value = true
+}
+
+const submitCreateMaterial = async () => {
+  if (!createForm.value.title) {
+    ElMessage.warning('请输入素材标题')
+    return
+  }
+  if (!createForm.value.content) {
+    ElMessage.warning('请输入素材内容')
+    return
+  }
+  createLoading.value = true
+  try {
+    await api.post('/material/', createForm.value)
+    ElMessage.success('素材创建成功')
+    createDialogVisible.value = false
+    await fetchMaterials()
+    await fetchStats()
+  } catch (e) {
+    ElMessage.error('创建失败: ' + (e.response?.data?.detail || e.message))
+  }
+  createLoading.value = false
 }
 
 onMounted(() => {

@@ -176,7 +176,7 @@
                 <div class="step-function">{{ section.function }}</div>
                 <div class="step-ratio">
                   <el-progress :percentage="section.ratio" :color="ratioColor(section.ratio)" :stroke-width="6" :show-text="false" />
-                  <span class="ratio-text">{{ section.ratio }}%</span>
+                  <span class="ratio-text">{{ Math.round(section.ratio) }}%</span>
                 </div>
               </div>
             </div>

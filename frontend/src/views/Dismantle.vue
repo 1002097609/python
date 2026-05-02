@@ -703,6 +703,11 @@ const submitDismantleAndExtract = async () => {
     ElMessage.warning('请先录入素材')
     return
   }
+  // L3 占比校验：有段落时必须恰好 100%
+  if (dismantleForm.l3_structure.length > 0 && l3RatioTotal.value !== 100) {
+    ElMessage.warning(`L3 结构占比合计为 ${l3RatioTotal.value}%，请调整为 100% 后再保存`)
+    return
+  }
   loading.value = true
   try {
     const payload = buildDismantlePayload()
