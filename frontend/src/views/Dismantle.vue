@@ -14,6 +14,7 @@
           <el-tag size="small" type="success" effect="plain">已有拆解</el-tag>
         </div>
         <div class="toolbar-right">
+          <el-button type="info" link size="small" @click="showHistory = true; fetchHistory(existingDismantle?.material_id)">📋 历史版本</el-button>
           <el-button type="primary" link size="small" @click="enterEditMode">✏️ 编辑拆解</el-button>
           <el-button type="success" link size="small" @click="extractSkeleton" :loading="extracting">🦴 提取骨架</el-button>
         </div>
@@ -145,6 +146,16 @@
               <el-button type="danger" link @click="removeSection(idx)">✕</el-button>
             </div>
             <el-button type="primary" link @click="addSection" class="add-section-btn">+ 添加段落</el-button>
+            <!-- L3 占比校验提示 -->
+            <div class="ratio-total" :class="{ 'ratio-error': l3RatioTotal !== 100 }">
+              <span class="ratio-total-label">当前占比合计：</span>
+              <span class="ratio-total-value" :style="{ color: l3RatioTotal === 100 ? '#27ae60' : '#e74c3c' }">
+                {{ l3RatioTotal }}%
+              </span>
+              <span v-if="l3RatioTotal !== 100" class="ratio-total-hint">
+                （{{ l3RatioTotal > 100 ? '超出' : '不足' }} {{ Math.abs(100 - l3RatioTotal) }}%，建议调整为 100%）
+              </span>
+            </div>
           </div>
         </div>
 
@@ -208,7 +219,72 @@
         <div class="step-badge">Step 0</div>
         <div class="step-title">录入原始素材</div>
       </div>
-      <el-form :model="materialForm" label-width="100px" class="form-body">
+
+      <!-- 素材来源切换 -->
+      <div class="material-source-tabs">
+        <div class="source-tab" :class="{ active: materialSource === 'library' }" @click="materialSource = 'library'">
+          📚 从素材库选择
+        </div>
+        <div class="source-tab" :class="{ active: materialSource === 'new' }" @click="materialSource = 'new'">
+          ✏️ 手动录入新素材
+        </div>
+      </div>
+
+      <!-- 从素材库选择 -->
+      <div v-if="materialSource === 'library'" class="material-picker">
+        <div class="picker-toolbar">
+          <el-input v-model="materialSearchKeyword" placeholder="搜索素材标题..." clearable style="width:260px" @input="fetchMaterialList" />
+          <el-select v-model="materialSearchPlatform" placeholder="全部平台" clearable style="width:140px" @change="fetchMaterialList">
+            <el-option v-for="opt in options.platform" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+          <el-select v-model="materialSearchCategory" placeholder="全部品类" clearable style="width:140px" @change="fetchMaterialList">
+            <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </div>
+        <el-table :data="materialList" stripe size="small" max-height="360" v-loading="materialListLoading"
+          highlight-current-row @row-click="onSelectMaterialFromLibrary" class="material-picker-table">
+          <el-table-column prop="id" label="ID" width="55" />
+          <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="platform" label="平台" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" v-if="row.platform">{{ row.platform }}</el-tag>
+              <span v-else class="text-muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="category" label="品类" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" type="success" v-if="row.category">{{ row.category }}</el-tag>
+              <span v-else class="text-muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="拆解状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row._dismantled ? 'success' : 'info'">
+                {{ row._dismantled ? '已拆解' : '未拆解' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <el-empty description="暂无素材" :image-size="60" />
+          </template>
+        </el-table>
+        <div class="picker-pagination" v-if="materialTotal > materialPageSize">
+          <el-pagination v-model:current-page="materialPage" :page-size="materialPageSize" :total="materialTotal"
+            layout="prev, pager, next" small @current-change="fetchMaterialList" />
+        </div>
+        <div v-if="selectedLibraryMaterial" class="picker-selected">
+          <span class="selected-label">已选择：</span>
+          <el-tag size="large" type="primary" closable @close="clearLibrarySelection">
+            {{ selectedLibraryMaterial.title }}
+          </el-tag>
+          <el-button type="primary" size="small" @click="confirmLibrarySelection" style="margin-left:12px">
+            确认使用此素材 →
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 手动录入新素材 -->
+      <el-form v-if="materialSource === 'new'" :model="materialForm" label-width="100px" class="form-body">
         <el-form-item label="素材标题">
           <el-input v-model="materialForm.title" placeholder="例如：秋冬保湿面霜成分测评" />
         </el-form-item>
@@ -229,20 +305,65 @@
           </el-col>
         </el-row>
         <el-form-item label="素材内容">
-          <el-input v-model="materialForm.content" type="textarea" :rows="6" placeholder="粘贴完整的素材脚本/文案..." />
+          <el-input v-model="materialForm.content" type="textarea" :rows="8" resize="vertical" placeholder="粘贴完整的素材脚本/文案..." />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="createMaterial" :loading="loading" size="large">📝 录入素材</el-button>
         </el-form-item>
       </el-form>
     </div>
+
+    <!-- 拆解历史版本 -->
+    <div class="card" v-if="showHistory && historyList.length > 0">
+      <div class="card-toolbar">
+        <div class="toolbar-left">
+          <span class="dot"></span>
+          <span class="card-title">拆解历史版本</span>
+          <el-tag size="small" type="info" effect="plain">{{ historyList.length }} 个版本</el-tag>
+        </div>
+        <el-button type="info" link size="small" @click="showHistory = false">← 返回</el-button>
+      </div>
+      <el-timeline>
+        <el-timeline-item
+          v-for="h in historyList"
+          :key="h.id"
+          :timestamp="formatTime(h.created_at)"
+          placement="top"
+          :type="h.id === existingDismantle?.id ? 'primary' : ''"
+        >
+          <div class="history-card">
+            <div class="history-meta">
+              <span class="history-version">版本 {{ h.version || h.id }}</span>
+              <el-tag v-if="h.id === existingDismantle?.id" size="small" type="success">当前版本</el-tag>
+            </div>
+            <div class="history-preview">
+              <span class="preview-label">L1 主题：</span><span class="preview-value">{{ h.l1_topic || '—' }}</span>
+              <span class="preview-label" style="margin-left:16px">L2 策略：</span>
+              <el-tag v-for="s in (h.l2_strategy || []).slice(0,3)" :key="s" size="small" style="margin-right:4px">{{ s }}</el-tag>
+            </div>
+            <el-button type="primary" link size="small" @click="restoreHistory(h)">↩ 恢复此版本</el-button>
+          </div>
+        </el-timeline-item>
+      </el-timeline>
+    </div>
+
+    <!-- 草稿恢复提示 -->
+    <el-alert
+      v-if="draftRestored"
+      title="已恢复上次未保存的草稿"
+      type="info"
+      show-icon
+      closable
+      @close="draftRestored = false"
+      style="margin-bottom:16px"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api, { getOptions, getDismantleByMaterial, createDismantle, updateDismantle } from '../api'
 
 const route = useRoute()
@@ -254,6 +375,131 @@ const currentMaterial = ref(null)
 const existingDismantle = ref(null)
 const editMode = ref(false)
 const showHistory = ref(false)
+
+// 素材来源选择器
+const materialSource = ref('library')
+const materialList = ref([])
+const materialTotal = ref(0)
+const materialPage = ref(1)
+const materialPageSize = ref(10)
+const materialSearchKeyword = ref('')
+const materialSearchPlatform = ref('')
+const materialSearchCategory = ref('')
+const selectedLibraryMaterial = ref(null)
+const materialListLoading = ref(false)
+
+const fetchMaterialList = async () => {
+  materialListLoading.value = true
+  try {
+    const params = {
+      page: materialPage.value,
+      page_size: materialPageSize.value,
+    }
+    if (materialSearchKeyword.value) params.keyword = materialSearchKeyword.value
+    if (materialSearchPlatform.value) params.platform = materialSearchPlatform.value
+    if (materialSearchCategory.value) params.category = materialSearchCategory.value
+    const { data } = await api.get('/material/', { params })
+    // status=1 表示已拆解，status=0 表示未拆解
+    materialList.value = (data.items || []).map(item => ({
+      ...item,
+      _dismantled: item.status === 1,
+    }))
+    materialTotal.value = data.total || 0
+  } catch (e) {
+    console.error('加载素材列表失败', e)
+  }
+  materialListLoading.value = false
+}
+
+const onSelectMaterialFromLibrary = (row) => {
+  selectedLibraryMaterial.value = row
+}
+
+const confirmLibrarySelection = () => {
+  if (!selectedLibraryMaterial.value) return
+  const mat = selectedLibraryMaterial.value
+  currentMaterial.value = mat
+  dismantleForm.material_id = mat.id
+  materialForm.title = mat.title || ''
+  materialForm.platform = mat.platform || ''
+  materialForm.category = mat.category || ''
+  materialForm.content = mat.content || ''
+  fetchExistingDismantle(mat.id)
+  // 尝试恢复草稿（若无已有拆解记录时）
+  if (!existingDismantle.value) {
+    loadDraft(mat.id)
+  }
+}
+
+const clearLibrarySelection = () => {
+  selectedLibraryMaterial.value = null
+}
+
+// 拆解历史
+const historyList = ref([])
+
+const fetchHistory = async (materialId) => {
+  if (!materialId) { historyList.value = []; return }
+  try {
+    const { data } = await api.get(`/dismantle/by-material/${materialId}/history`)
+    historyList.value = Array.isArray(data) ? data : []
+  } catch {
+    historyList.value = []
+  }
+}
+
+const restoreHistory = async (h) => {
+  try {
+    await ElMessageBox.confirm(`确认恢复版本 ${h.version || h.id}？当前未保存的修改将丢失。`, '恢复历史版本', {
+      confirmButtonText: '确认恢复',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch { return }
+  fillDismantleForm(h)
+  editMode.value = true
+  showHistory.value = false
+  ElMessage.success('已恢复历史版本，请重新保存')
+}
+
+const formatTime = (t) => {
+  if (!t) return '—'
+  const d = new Date(t)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+}
+
+// 草稿自动保存
+const draftRestored = ref(false)
+const DRAFT_KEY = 'dismantle_draft_'
+
+const saveDraft = () => {
+  if (!dismantleForm.material_id) return
+  const draft = {
+    ...dismantleForm,
+    _savedAt: Date.now(),
+  }
+  localStorage.setItem(DRAFT_KEY + dismantleForm.material_id, JSON.stringify(draft))
+}
+
+const loadDraft = (materialId) => {
+  const raw = localStorage.getItem(DRAFT_KEY + materialId)
+  if (!raw) return false
+  try {
+    const draft = JSON.parse(raw)
+    const ageHours = (Date.now() - (draft._savedAt || 0)) / 3600000
+    if (ageHours > 48) { localStorage.removeItem(DRAFT_KEY + materialId); return false }
+    delete draft._savedAt
+    Object.assign(dismantleForm, draft)
+    draftRestored.value = true
+    return true
+  } catch {
+    return false
+  }
+}
+
+const clearDraft = (materialId) => {
+  localStorage.removeItem(DRAFT_KEY + materialId)
+}
 
 const options = ref({
   platform: [], category: [], style: [], strategy: [],
@@ -317,6 +563,7 @@ const fillDismantleForm = (data) => {
 
 onMounted(async () => {
   fetchOptions()
+  fetchMaterialList() // 预加载素材列表
   // 从素材库跳转过来时自动填充
   const materialId = route.query.material_id
   if (materialId) {
@@ -347,6 +594,9 @@ onMounted(async () => {
 
     // 检查是否已有拆解记录
     await fetchExistingDismantle(id)
+    if (!existingDismantle.value) {
+      loadDraft(id)
+    }
   }
 })
 
@@ -362,6 +612,11 @@ const dismantleForm = reactive({
   l4_elements: { title_formula: '', hook: '', transition: '', interaction: '' },
   l5_expressions: { golden_sentences: [], data_refs: [], visual_desc: [] },
 })
+
+// 监听表单变化自动保存草稿
+watch(dismantleForm, () => {
+  if (dismantleForm.material_id) saveDraft()
+}, { deep: true })
 
 const createMaterial = async () => {
   if (!materialForm.title || !materialForm.content) {
@@ -409,6 +664,11 @@ const submitDismantle = async () => {
     ElMessage.warning('请先录入素材')
     return
   }
+  // L3 占比校验：有段落时必须恰好 100%
+  if (dismantleForm.l3_structure.length > 0 && l3RatioTotal.value !== 100) {
+    ElMessage.warning(`L3 结构占比合计为 ${l3RatioTotal.value}%，请调整为 100% 后再保存`)
+    return
+  }
   loading.value = true
   try {
     const payload = buildDismantlePayload()
@@ -425,6 +685,8 @@ const submitDismantle = async () => {
     }
     // 重新加载确保数据同步
     await fetchExistingDismantle(dismantleForm.material_id)
+    // 清除草稿
+    clearDraft(dismantleForm.material_id)
   } catch (e) {
     ElMessage.error('保存失败: ' + (e.response?.data?.detail || e.message))
   }
@@ -456,6 +718,7 @@ const submitDismantleAndExtract = async () => {
     await api.post(`/skeleton/from-dismantle/${dismantleId}`)
     ElMessage.success('拆解完成，骨架已自动提取！')
     await fetchExistingDismantle(dismantleForm.material_id)
+    clearDraft(dismantleForm.material_id)
   } catch (e) {
     ElMessage.error('操作失败: ' + (e.response?.data?.detail || e.message))
   }
@@ -487,6 +750,11 @@ const extractSkeleton = async () => {
   }
   extracting.value = false
 }
+
+// L3 占比合计校验
+const l3RatioTotal = computed(() => {
+  return (dismantleForm.l3_structure || []).reduce((sum, s) => sum + (Number(s.ratio) || 0), 0)
+})
 
 const addSection = () => {
   dismantleForm.l3_structure.push({ name: '', function: '', ratio: 10, template: '' })
@@ -546,6 +814,11 @@ const removeSection = (idx) => {
 
 .layer-view { border-radius: 10px; overflow: hidden; border: 1px solid #e8e8e8; }
 .layer-view .layer-header { color: #fff; }
+.layer-view > .view-row:first-of-type { padding-top: 12px; }
+.layer-view > .view-row:last-of-type { padding-bottom: 12px; }
+.layer-view > .view-row,
+.layer-view > .structure-view-row,
+.layer-view > .text-muted { padding-left: 18px; padding-right: 18px; }
 
 .view-row {
   display: flex;
@@ -596,8 +869,26 @@ const removeSection = (idx) => {
   gap: 8px;
   margin-bottom: 8px;
 }
-.ratio-unit { font-size: 13px; color: #888; }
+.structure-row .el-input,
+.structure-row .el-input-number {
+  flex-shrink: 0;
+}
+.ratio-unit { font-size: 13px; color: #888; flex-shrink: 0; }
 .add-section-btn { margin-top: 4px; }
+
+/* L3 占比校验 */
+.ratio-total {
+  margin-top: 10px; padding: 8px 12px;
+  background: #f0f9f4; border-radius: 6px;
+  border-left: 3px solid #27ae60;
+  font-size: 13px;
+}
+.ratio-total.ratio-error {
+  background: #fdf0f0; border-left-color: #e74c3c;
+}
+.ratio-total-label { color: #666; }
+.ratio-total-value { font-weight: 700; margin: 0 4px; }
+.ratio-total-hint { color: #e74c3c; font-size: 12px; }
 
 .form-actions {
   display: flex;
@@ -610,10 +901,57 @@ const removeSection = (idx) => {
 
 .text-muted { color: #bbb; font-size: 13px; }
 
+/* 素材来源选择器 */
+.material-source-tabs {
+  display: flex; gap: 8px; margin-bottom: 20px;
+}
+.source-tab {
+  padding: 10px 20px; border-radius: 8px; cursor: pointer;
+  font-size: 14px; font-weight: 500; color: #666;
+  background: #f5f5f5; border: 2px solid transparent;
+  transition: all .2s;
+}
+.source-tab:hover { background: #eee; }
+.source-tab.active {
+  background: linear-gradient(135deg, rgba(102,126,234,.1), rgba(118,75,162,.1));
+  border-color: #667eea; color: #667eea;
+}
+
+/* 素材选择面板 */
+.material-picker { margin-top: 4px; }
+.picker-toolbar {
+  display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.material-picker-table { border-radius: 8px; cursor: pointer; }
+.picker-pagination {
+  display: flex; justify-content: center; margin-top: 12px;
+}
+.picker-selected {
+  margin-top: 14px; padding: 12px 16px;
+  background: #f0f4ff; border-radius: 8px;
+  border-left: 3px solid #667eea;
+  display: flex; align-items: center; gap: 8px;
+}
+.selected-label { font-size: 13px; color: #888; }
+
+/* 历史版本 */
+.history-card {
+  padding: 12px 16px; border-radius: 8px;
+  background: #fafafa; border: 1px solid #eee;
+}
+.history-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.history-version { font-size: 13px; font-weight: 600; color: #555; }
+.history-preview { font-size: 13px; color: #666; margin-bottom: 8px; }
+.preview-label { color: #999; }
+.preview-value { color: #333; }
+
 @media (max-width: 768px) {
   .page { padding: 16px; }
   .card { padding: 16px; }
-  .form-actions { flex-direction: column; }
-  .structure-row { flex-wrap: wrap; }
+  .form-actions { flex-direction: column; align-items: stretch; }
+  .form-actions .el-button { width: 100%; }
+  .structure-row { flex-wrap: wrap; row-gap: 6px; }
+  .view-row { flex-direction: column; gap: 4px; }
+  .view-label { padding-top: 0; }
 }
 </style>

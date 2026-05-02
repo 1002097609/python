@@ -50,6 +50,54 @@
           <div v-if="skeletons.length === 0 && !loadingSkeleton" class="step-empty">
             暂无骨架，请先在「素材拆解」页面提取骨架
           </div>
+
+          <!-- 骨架预览面板 -->
+          <div class="skeleton-preview" v-if="selectedSkeletonData">
+            <div class="preview-header">
+              <span class="preview-icon">🔍</span>
+              <span class="preview-title">骨架预览 — {{ selectedSkeletonData.name }}</span>
+            </div>
+            <!-- L2 策略 -->
+            <div class="preview-row" v-if="selectedSkeletonData.strategy_desc">
+              <span class="preview-label">L2 策略：</span>
+              <span class="preview-val">{{ selectedSkeletonData.strategy_desc }}</span>
+            </div>
+            <!-- L3 结构 -->
+            <div class="preview-row" v-if="selectedSkeletonData.structure_json && selectedSkeletonData.structure_json.length">
+              <span class="preview-label">L3 结构：</span>
+              <div class="preview-structures">
+                <span
+                  v-for="(s, i) in selectedSkeletonData.structure_json"
+                  :key="i"
+                  class="structure-chip"
+                >
+                  {{ s.name || s }}
+                  <em v-if="s.ratio">({{ Math.round(s.ratio * 100) }}%)</em>
+                </span>
+              </div>
+            </div>
+            <!-- L4 元素摘要 -->
+            <div class="preview-row" v-if="selectedSkeletonData.elements_json">
+              <span class="preview-label">L4 元素：</span>
+              <div class="preview-elements">
+                <span v-if="selectedSkeletonData.elements_json.hook" class="element-item">
+                  🎣 钩子：{{ selectedSkeletonData.elements_json.hook }}
+                </span>
+                <span v-if="selectedSkeletonData.elements_json.transition" class="element-item">
+                  🔀 转折：{{ selectedSkeletonData.elements_json.transition }}
+                </span>
+                <span v-if="selectedSkeletonData.elements_json.interaction" class="element-item">
+                  💡 互动：{{ selectedSkeletonData.elements_json.interaction }}
+                </span>
+              </div>
+            </div>
+            <!-- 效果统计 -->
+            <div class="preview-stats" v-if="selectedSkeletonData.avg_roi || selectedSkeletonData.avg_ctr || selectedSkeletonData.usage_count">
+              <span v-if="selectedSkeletonData.avg_roi">💰 ROI {{ Number(selectedSkeletonData.avg_roi).toFixed(1) }}x</span>
+              <span v-if="selectedSkeletonData.avg_ctr">📈 CTR {{ Number(selectedSkeletonData.avg_ctr).toFixed(1) }}%</span>
+              <span v-if="selectedSkeletonData.usage_count">🔄 已使用 {{ selectedSkeletonData.usage_count }} 次</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -87,6 +135,14 @@
         <div class="step-content">
           <div class="step-title">填写替换内容</div>
           <div class="step-desc">输入新主题、品类、风格等替换信息</div>
+
+          <!-- 批量模式切换 -->
+          <div class="batch-toggle">
+            <el-checkbox v-model="batchMode" size="large">
+              <span class="batch-toggle-label">🔄 批量模式 — 一次生成多个变体</span>
+            </el-checkbox>
+            <span class="batch-toggle-hint" v-if="batchMode">将替换内容拆分为多组，每组生成一个裂变结果</span>
+          </div>
           <el-form :model="fissionForm" label-width="100px" style="margin-top:16px">
             <!-- 基础信息 -->
             <div class="form-section">
@@ -126,21 +182,49 @@
             <!-- L5 表达层 -->
             <div class="form-section">
               <div class="form-section-title">💬 L5 表达层 — 金句、数据、视觉</div>
-              <el-form-item label="金句">
-                <el-select v-model="fissionForm.replacement.L5.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句（多条会均匀分配到各段落）" style="width:100%">
-                  <el-option v-for="opt in options.golden_sentence" :key="opt.value" :label="opt.label" :value="opt.value" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="数据引用">
-                <el-select v-model="fissionForm.replacement.L5.data_refs" multiple allow-create filterable placeholder="选择或输入数据（会嵌入到正文段落中）" style="width:100%">
-                  <el-option v-for="opt in options.data_ref" :key="opt.value" :label="opt.label" :value="opt.value" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="视觉描述">
-                <el-select v-model="fissionForm.replacement.L5.visual_desc" multiple allow-create filterable placeholder="选择或输入视觉描述（会生成画面指导）" style="width:100%">
-                  <el-option v-for="opt in options.visual_desc" :key="opt.value" :label="opt.label" :value="opt.value" />
-                </el-select>
-              </el-form-item>
+              <!-- 批量模式：多组输入 -->
+              <template v-if="batchMode">
+                <div v-for="(group, gIdx) in batchGroups" :key="gIdx" class="batch-group">
+                  <div class="batch-group-header">
+                    <span class="batch-group-num">变体 {{ gIdx + 1 }}</span>
+                    <el-button v-if="batchGroups.length > 1" type="danger" link size="small" @click="removeBatchGroup(gIdx)">✕ 移除</el-button>
+                  </div>
+                  <el-form-item label="金句">
+                    <el-select v-model="group.L5.golden_sentences" multiple allow-create filterable placeholder="金句（多条会均匀分配到各段落）" style="width:100%">
+                      <el-option v-for="opt in options.golden_sentence" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="数据引用">
+                    <el-select v-model="group.L5.data_refs" multiple allow-create filterable placeholder="数据（会嵌入到正文段落中）" style="width:100%">
+                      <el-option v-for="opt in options.data_ref" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="视觉描述">
+                    <el-select v-model="group.L5.visual_desc" multiple allow-create filterable placeholder="视觉描述（会生成画面指导）" style="width:100%">
+                      <el-option v-for="opt in options.visual_desc" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    </el-select>
+                  </el-form-item>
+                </div>
+                <el-button type="primary" link @click="addBatchGroup" class="add-batch-btn">+ 添加变体组</el-button>
+              </template>
+              <!-- 单条模式 -->
+              <template v-else>
+                <el-form-item label="金句">
+                  <el-select v-model="fissionForm.replacement.L5.golden_sentences" multiple allow-create filterable placeholder="选择或输入金句（多条会均匀分配到各段落）" style="width:100%">
+                    <el-option v-for="opt in options.golden_sentence" :key="opt.value" :label="opt.label" :value="opt.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="数据引用">
+                  <el-select v-model="fissionForm.replacement.L5.data_refs" multiple allow-create filterable placeholder="选择或输入数据（会嵌入到正文段落中）" style="width:100%">
+                    <el-option v-for="opt in options.data_ref" :key="opt.value" :label="opt.label" :value="opt.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="视觉描述">
+                  <el-select v-model="fissionForm.replacement.L5.visual_desc" multiple allow-create filterable placeholder="选择或输入视觉描述（会生成画面指导）" style="width:100%">
+                    <el-option v-for="opt in options.visual_desc" :key="opt.value" :label="opt.label" :value="opt.value" />
+                  </el-select>
+                </el-form-item>
+              </template>
             </div>
 
             <!-- L4 元素层（可选覆盖） -->
@@ -166,6 +250,41 @@
                   <el-input v-model="fissionForm.replacement.L4.interaction" placeholder="覆盖骨架中的互动设计" />
                 </el-form-item>
               </template>
+              <!-- L4 骨架默认值（未开启自定义覆盖时展示） -->
+              <template v-else>
+                <div class="l4-defaults" v-if="l4Defaults">
+                  <div class="l4-defaults-hint">以下使用骨架默认 L4 元素，勾选「自定义覆盖」可修改</div>
+                  <div class="l4-defaults-grid">
+                    <div class="l4-default-item" v-if="l4Defaults.hook">
+                      <span class="l4-default-label">🎣 钩子句式</span>
+                      <span class="l4-default-val">{{ l4Defaults.hook }}</span>
+                    </div>
+                    <div class="l4-default-item" v-if="l4Defaults.transition">
+                      <span class="l4-default-label">🔀 转折方式</span>
+                      <span class="l4-default-val">{{ l4Defaults.transition }}</span>
+                    </div>
+                    <div class="l4-default-item" v-if="l4Defaults.interaction">
+                      <span class="l4-default-label">💡 互动设计</span>
+                      <span class="l4-default-val">{{ l4Defaults.interaction }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="l4-no-data" v-else>
+                  当前骨架未配置 L4 元素，可勾选「自定义覆盖」手动填写
+                </div>
+              </template>
+            </div>
+
+            <!-- 模板预设 -->
+            <div class="form-section">
+              <div class="form-section-title">📋 模板预设</div>
+              <div class="preset-bar">
+                <el-select v-model="selectedPreset" placeholder="加载已保存的预设..." clearable style="width:260px" @change="applyPreset" :loading="loadingPresets">
+                  <el-option v-for="p in presetList" :key="p.id" :label="p.name" :value="p.id" />
+                </el-select>
+                <el-button type="primary" link size="small" @click="openSavePreset">💾 保存当前为预设</el-button>
+                <el-button type="danger" link size="small" @click="deletePreset" :disabled="!selectedPreset">🗑️ 删除预设</el-button>
+              </div>
             </div>
 
             <el-form-item style="margin-top:20px">
@@ -180,60 +299,120 @@
     </div>
 
     <!-- 裂变结果 -->
-    <div class="card result-card" v-if="fissionResult">
+    <div class="card result-card" v-if="fissionResults.length > 0">
       <div class="result-header">
         <div class="result-badge">✨ 裂变完成</div>
         <div class="result-meta">
           <el-tag size="small" type="success">{{ fissionModeLabel }}</el-tag>
           <span class="result-skeleton-name">基于：{{ selectedSkeletonName }}</span>
+          <el-tag v-if="fissionResults.length > 1" size="small" type="warning">{{ fissionResults.length }} 个变体</el-tag>
         </div>
       </div>
 
-      <div class="result-prediction">
-        <div class="prediction-item">
-          <span class="prediction-label">预测 CTR</span>
-          <span class="prediction-value">{{ fissionResult.predicted_ctr }}</span>
-        </div>
-        <div class="prediction-divider"></div>
-        <div class="prediction-item">
-          <span class="prediction-label">预测 ROI</span>
-          <span class="prediction-value prediction-highlight">{{ fissionResult.predicted_roi }}</span>
-        </div>
-      </div>
-
-      <div class="result-content-wrapper">
-        <div class="result-content-label">📝 裂变产出内容</div>
-        <div class="result-content-sections">
-          <div v-for="(section, idx) in parsedResult" :key="idx" class="result-section" :class="section.type">
-            <div class="section-header" v-if="section.header">
-              <span class="section-icon">{{ section.icon }}</span>
-              <span class="section-title-text">{{ section.header }}</span>
+      <!-- 多结果 tabs -->
+      <el-tabs v-if="fissionResults.length > 1" v-model="activeResultTab" type="card" class="result-tabs">
+        <el-tab-pane v-for="(res, idx) in fissionResults" :key="idx" :label="`变体 ${idx + 1}`" :name="String(idx)">
+          <div class="result-single" :data-result-idx="idx">
+            <div class="result-prediction">
+              <div class="prediction-item"><span class="prediction-label">预测 CTR</span><span class="prediction-value">{{ res.predicted_ctr }}</span></div>
+              <div class="prediction-divider"></div>
+              <div class="prediction-item"><span class="prediction-label">预测 ROI</span><span class="prediction-value prediction-highlight">{{ res.predicted_roi }}</span></div>
             </div>
-            <div class="section-body" v-if="section.lines.length">
-              <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
-                <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
-                <span class="line-text">{{ line.text }}</span>
+            <div class="result-content-wrapper">
+              <div class="result-content-label">📝 裂变产出内容</div>
+              <div class="result-content-sections">
+                <div v-for="(section, sidx) in parseFissionContent(res.output_content)" :key="sidx" class="result-section" :class="section.type">
+                  <div class="section-header" v-if="section.header"><span class="section-icon">{{ section.icon }}</span><span class="section-title-text">{{ section.header }}</span></div>
+                  <div class="section-body" v-if="section.lines.length">
+                    <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
+                      <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
+                      <span class="line-text">{{ line.text }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="result-actions">
+              <el-button type="success" @click="saveAsMaterial(idx)" size="large">💾 保存为新素材</el-button>
+              <el-button type="primary" @click="copyResult(idx)" size="large">📋 复制</el-button>
+              <el-button @click="exportResultJson(idx)" size="large">📦 导出</el-button>
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+
+      <!-- 单结果 -->
+      <template v-else-if="fissionResults.length === 1">
+        <div class="result-prediction">
+          <div class="prediction-item"><span class="prediction-label">预测 CTR</span><span class="prediction-value">{{ fissionResults[0].predicted_ctr }}</span></div>
+          <div class="prediction-divider"></div>
+          <div class="prediction-item"><span class="prediction-label">预测 ROI</span><span class="prediction-value prediction-highlight">{{ fissionResults[0].predicted_roi }}</span></div>
+        </div>
+        <div class="result-content-wrapper">
+          <div class="result-content-label">📝 裂变产出内容</div>
+          <div class="result-content-sections">
+            <div v-for="(section, sidx) in parseFissionContent(fissionResults[0].output_content)" :key="sidx" class="result-section" :class="section.type">
+              <div class="section-header" v-if="section.header"><span class="section-icon">{{ section.icon }}</span><span class="section-title-text">{{ section.header }}</span></div>
+              <div class="section-body" v-if="section.lines.length">
+                <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
+                  <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
+                  <span class="line-text">{{ line.text }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <div class="result-actions">
-        <el-button type="primary" @click="copyResult" size="large">📋 复制纯文本</el-button>
-        <el-button @click="resetFission" size="large">🔄 再来一次</el-button>
-      </div>
+        <div class="result-actions">
+          <el-button type="success" @click="saveAsMaterial(0)" size="large">💾 保存为新素材</el-button>
+          <el-button type="primary" @click="copyResult(0)" size="large">📋 复制纯文本</el-button>
+          <el-button @click="exportResultJson(0)" size="large">📦 导出 JSON</el-button>
+          <el-button @click="resetFission" size="large">🔄 再来一次</el-button>
+        </div>
+      </template>
     </div>
+
+    <!-- 保存为素材弹窗 -->
+    <el-dialog v-model="saveDialogVisible" title="💾 保存为新素材" width="520px" destroy-on-close>
+      <el-form :model="saveForm" label-width="90px">
+        <el-form-item label="素材标题" required>
+          <el-input v-model="saveForm.title" placeholder="输入新素材标题" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="平台">
+              <el-select v-model="saveForm.platform" placeholder="选择平台" style="width:100%">
+                <el-option v-for="opt in options.platform" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="品类">
+              <el-select v-model="saveForm.category" placeholder="选择品类" style="width:100%">
+                <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="素材内容">
+          <el-input v-model="saveForm.content" type="textarea" :rows="8" resize="vertical" placeholder="裂变产出的内容" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="saveDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSaveMaterial" :loading="saveLoading">确认保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import api, { getOptions } from '../api'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import api, { getOptions, getFissionPresets, createFissionPreset, deleteFissionPreset } from '../api'
 
 const route = useRoute()
+const router = useRouter()
 
 const loading = ref(false)
 const loadingOptions = ref(false)
@@ -243,7 +422,18 @@ const selectedSkeleton = ref(null)
 const skeletonPlatformFilter = ref('')
 const skeletonTypeFilter = ref('')
 const fissionMode = ref('replace_leaf')
-const fissionResult = ref(null)
+const fissionResults = ref([])
+const activeResultTab = ref('0')
+const batchMode = ref(false)
+
+// 批量变体组
+const newEmptyGroup = () => ({
+  L5: { golden_sentences: [], data_refs: [], visual_desc: [] },
+})
+const batchGroups = ref([newEmptyGroup()])
+
+const addBatchGroup = () => { batchGroups.value.push(newEmptyGroup()) }
+const removeBatchGroup = (idx) => { batchGroups.value.splice(idx, 1) }
 
 const options = ref({
   platform: [],
@@ -298,6 +488,21 @@ const selectedSkeletonName = computed(() => {
   return sk ? sk.name : ''
 })
 
+// 当前选中的骨架完整数据（用于预览面板）
+const selectedSkeletonData = computed(() => {
+  if (!selectedSkeleton.value) return null
+  return skeletons.value.find(s => s.id === selectedSkeleton.value) || null
+})
+
+// L4 默认值（从当前骨架的 elements_json 中提取）
+const l4Defaults = computed(() => {
+  const sk = selectedSkeletonData.value
+  if (!sk || !sk.elements_json) return null
+  const el = sk.elements_json
+  const hasAny = el.hook || el.transition || el.interaction
+  return hasAny ? { hook: el.hook || '', transition: el.transition || '', interaction: el.interaction || '' } : null
+})
+
 // 骨架筛选选项（从已加载骨架中提取）
 const skeletonPlatforms = computed(() => {
   const set = new Set(skeletons.value.map(s => s.platform).filter(Boolean))
@@ -306,12 +511,6 @@ const skeletonPlatforms = computed(() => {
 const skeletonTypes = computed(() => {
   const set = new Set(skeletons.value.map(s => s.skeleton_type).filter(Boolean))
   return [...set]
-})
-
-// 解析裂变结果为结构化段落
-const parsedResult = computed(() => {
-  if (!fissionResult.value?.output_content) return []
-  return parseFissionContent(fissionResult.value.output_content)
 })
 
 const fetchOptions = async () => {
@@ -343,30 +542,89 @@ const onSkeletonChange = (val) => {
   fissionForm.skeleton_id = val
 }
 
+// 内容完整性校验
+const validateFissionForm = () => {
+  const warnings = []
+  const mode = fissionMode.value
+  const hasGolden = fissionForm.replacement.L5.golden_sentences.length > 0
+  const hasData = fissionForm.replacement.L5.data_refs.length > 0
+  const hasVisual = fissionForm.replacement.L5.visual_desc.length > 0
+  const hasAnyL5 = hasGolden || hasData || hasVisual
+
+  if (!fissionForm.new_topic) warnings.push('请填写新主题')
+  if (!fissionForm.new_category) warnings.push('建议填写新品类以便后续筛选')
+
+  if (mode === 'replace_leaf' && !hasAnyL5) {
+    warnings.push('「换叶子」模式建议至少填写 L5 表达层（金句/数据/视觉）中的一项')
+  }
+  if (mode === 'replace_branch' && !fissionForm.new_category) {
+    warnings.push('「换枝杈」模式需要填写新品类')
+  }
+
+  return warnings
+}
+
 const executeFission = async () => {
   if (!fissionForm.skeleton_id) {
     ElMessage.warning('请先选择骨架')
     return
   }
-  if (!fissionForm.new_topic) {
-    ElMessage.warning('请填写新主题')
-    return
+  // 完整性校验（仅警告，不阻止）
+  const warnings = validateFissionForm()
+  if (warnings.length > 0) {
+    const critical = warnings.filter(w => w.startsWith('请'))
+    if (critical.length > 0) {
+      ElMessage.warning(critical[0])
+      return
+    }
+    // 非关键警告：提示但允许继续
+    try {
+      await ElMessageBox.confirm(
+        warnings.join('\n'),
+        '内容完整性提醒',
+        { confirmButtonText: '继续裂变', cancelButtonText: '去补充', type: 'warning' }
+      )
+    } catch { return }
   }
   loading.value = true
   try {
-    const payload = { ...fissionForm, fission_mode: fissionMode.value }
-    const { data } = await api.post('/fission/', payload)
-    fissionResult.value = data
-    ElMessage.success('裂变成功！')
+    if (batchMode.value && batchGroups.value.length > 1) {
+      // 批量模式：逐组调用，收集结果
+      const results = []
+      for (let i = 0; i < batchGroups.value.length; i++) {
+        const group = batchGroups.value[i]
+        const payload = {
+          ...fissionForm,
+          fission_mode: fissionMode.value,
+          replacement: {
+            L5: group.L5,
+            L4: fissionForm.replacement.L4,
+          },
+        }
+        const { data } = await api.post('/fission/', payload)
+        results.push(data)
+      }
+      fissionResults.value = results
+      activeResultTab.value = '0'
+      ElMessage.success(`裂变完成，已生成 ${results.length} 个变体！`)
+    } else {
+      // 单条模式
+      const payload = { ...fissionForm, fission_mode: fissionMode.value }
+      const { data } = await api.post('/fission/', payload)
+      fissionResults.value = [data]
+      activeResultTab.value = '0'
+      ElMessage.success('裂变成功！')
+    }
   } catch (e) {
     ElMessage.error('裂变失败: ' + (e.response?.data?.detail || e.message))
   }
   loading.value = false
 }
 
-const copyResult = async () => {
-  if (!fissionResult.value?.output_content) return
-  const text = fissionResult.value.output_content
+const copyResult = async (idx) => {
+  const res = fissionResults.value[idx ?? 0]
+  if (!res?.output_content) return
+  const text = res.output_content
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text)
@@ -387,8 +645,45 @@ const copyResult = async () => {
   }
 }
 
+const exportResultJson = (idx) => {
+  const res = fissionResults.value[idx ?? 0]
+  if (!res) return
+  const exportData = {
+    skeleton: { id: selectedSkeletonData.value?.id || null, name: selectedSkeletonName.value },
+    fission_mode: fissionMode.value,
+    fission_mode_label: fissionModeLabel.value,
+    form: {
+      new_topic: fissionForm.new_topic,
+      new_category: fissionForm.new_category,
+      new_style: fissionForm.new_style,
+      new_platform: fissionForm.new_platform,
+      replacement: fissionForm.replacement,
+    },
+    result: {
+      id: res.id,
+      output_content: res.output_content,
+      predicted_ctr: res.predicted_ctr,
+      predicted_roi: res.predicted_roi,
+      created_at: res.created_at,
+    },
+  }
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const safeName = (selectedSkeletonName.value || 'fission').replace(/[\\/:*?"<>|]/g, '_')
+  const suffix = fissionResults.value.length > 1 ? `_variant${idx + 1}` : ''
+  a.download = `fission_${safeName}${suffix}_${Date.now()}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  ElMessage.success('已导出 JSON 文件')
+}
+
 const resetFission = () => {
-  fissionResult.value = null
+  fissionResults.value = []
+  activeResultTab.value = '0'
   resetFissionForm()
 }
 
@@ -452,10 +747,126 @@ const resetFissionForm = () => {
     L4: { hook: '', transition: '', interaction: '' },
   }
   showL4Overrides.value = false
+  batchMode.value = false
+  batchGroups.value = [newEmptyGroup()]
+  selectedPreset.value = ''
 }
+
+// 模板预设（后端动态加载）
+const selectedPreset = ref('')
+const presetList = ref([])
+const loadingPresets = ref(false)
+
+const fetchPresets = async () => {
+  loadingPresets.value = true
+  try {
+    presetList.value = await getFissionPresets()
+  } catch (e) {
+    console.error('加载预设失败', e)
+  }
+  loadingPresets.value = false
+}
+
+const openSavePreset = async () => {
+  if (!fissionForm.new_topic) { ElMessage.warning('请先填写新主题再保存预设'); return }
+  const name = prompt('输入预设名称：', fissionForm.new_topic)
+  if (!name) return
+  try {
+    await createFissionPreset({
+      name,
+      description: '',
+      config_json: {
+        new_category: fissionForm.new_category,
+        new_style: fissionForm.new_style,
+        new_platform: fissionForm.new_platform,
+        replacement: fissionForm.replacement,
+      },
+    })
+    ElMessage.success(`预设「${name}」已保存`)
+    await fetchPresets()
+  } catch (e) {
+    ElMessage.error('保存预设失败')
+  }
+}
+
+const applyPreset = (key) => {
+  if (!key) return
+  const preset = presetList.value.find(p => String(p.id) === String(key) || p._key === key)
+  if (!preset) return
+  const config = preset.config_json || {}
+  if (config.new_category) fissionForm.new_category = config.new_category
+  if (config.new_style) fissionForm.new_style = config.new_style
+  if (config.new_platform) fissionForm.new_platform = config.new_platform
+  if (config.replacement) {
+    fissionForm.replacement = JSON.parse(JSON.stringify(config.replacement))
+  }
+  ElMessage.success(`已加载预设「${preset.name}」`)
+}
+
+const deletePreset = async () => {
+  if (!selectedPreset.value) return
+  try {
+    await deleteFissionPreset(selectedPreset.value)
+    ElMessage.success('预设已删除')
+    selectedPreset.value = ''
+    await fetchPresets()
+  } catch (e) {
+    ElMessage.error('删除预设失败')
+  }
+}
+
+// 保存为新素材
+const saveDialogVisible = ref(false)
+const saveLoading = ref(false)
+const saveForm = reactive({
+  title: '',
+  platform: '',
+  category: '',
+  content: '',
+})
+
+const saveAsMaterial = (idx) => {
+  const res = fissionResults.value[idx ?? 0]
+  if (!res?.output_content) return
+  saveForm.title = fissionForm.new_topic ? `【裂变】${fissionForm.new_topic}` : ''
+  if (fissionResults.value.length > 1) saveForm.title += ` - 变体${idx + 1}`
+  saveForm.platform = fissionForm.new_platform || ''
+  saveForm.category = fissionForm.new_category || ''
+  saveForm.content = res.output_content
+  saveDialogVisible.value = true
+}
+
+const confirmSaveMaterial = async () => {
+  if (!saveForm.title) { ElMessage.warning('请输入素材标题'); return }
+  if (!saveForm.content) { ElMessage.warning('素材内容不能为空'); return }
+  saveLoading.value = true
+  try {
+    await api.post('/material/', saveForm)
+    ElMessage.success('已保存为新素材，可在素材库查看')
+    saveDialogVisible.value = false
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e.response?.data?.detail || e.message))
+  }
+  saveLoading.value = false
+}
+
+// 同步单条模式和批量模式的数据
+watch(batchMode, (val) => {
+  if (val) {
+    // 切换到批量：将当前单条数据复制到第一组
+    if (batchGroups.value.length === 0) batchGroups.value.push(newEmptyGroup())
+    batchGroups.value[0].L5 = JSON.parse(JSON.stringify(fissionForm.replacement.L5))
+  } else {
+    // 切换到单条：将第一组数据合并回单条
+    if (batchGroups.value.length > 0) {
+      fissionForm.replacement.L5 = JSON.parse(JSON.stringify(batchGroups.value[0].L5))
+    }
+  }
+})
 
 onMounted(() => {
   fetchOptions()
+  fetchPresets()
   fetchSkeletons().then(() => {
     const skeletonId = route.query.skeleton_id
     if (skeletonId) {
@@ -490,6 +901,53 @@ onMounted(() => {
 .step-title { font-size: 16px; font-weight: 600; color: #333; }
 .step-desc { font-size: 13px; color: #999; margin-top: 2px; }
 .step-empty { margin-top: 12px; padding: 16px; background: #fff8e6; border-radius: 8px; font-size: 13px; color: #e6a700; text-align: center; }
+
+/* Skeleton preview panel */
+.skeleton-preview {
+  margin-top: 16px; padding: 16px;
+  background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+  border-radius: 10px; border: 1px solid #e0e7ff;
+}
+.preview-header { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.preview-icon { font-size: 16px; }
+.preview-title { font-size: 13px; font-weight: 600; color: #4338ca; }
+.preview-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.preview-row:last-child { margin-bottom: 0; }
+.preview-label { color: #6366f1; font-weight: 500; white-space: nowrap; flex-shrink: 0; padding-top: 1px; }
+.preview-val { color: #444; line-height: 1.6; }
+.preview-structures { display: flex; flex-wrap: wrap; gap: 6px; }
+.structure-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 10px; border-radius: 12px;
+  background: #e0e7ff; color: #4338ca; font-size: 12px;
+}
+.structure-chip em { font-style: normal; color: #818cf8; font-size: 11px; }
+.preview-elements { display: flex; flex-direction: column; gap: 4px; }
+.element-item { font-size: 12px; color: #555; line-height: 1.5; }
+.preview-stats {
+  display: flex; align-items: center; gap: 16px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px dashed #c7d2fe;
+  font-size: 12px; color: #6366f1;
+}
+
+/* L4 defaults display */
+.l4-defaults { margin-top: 4px; }
+.l4-defaults-hint {
+  font-size: 12px; color: #8b8b8b; margin-bottom: 10px;
+  padding: 6px 10px; background: #fff8e6; border-radius: 6px; border-left: 3px solid #e6a700;
+}
+.l4-defaults-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.l4-default-item {
+  padding: 8px 12px; background: #f8f9fa; border-radius: 8px;
+  border: 1px solid #eee; display: flex; flex-direction: column; gap: 2px;
+}
+.l4-default-label { font-size: 12px; color: #888; font-weight: 500; }
+.l4-default-val { font-size: 13px; color: #333; }
+.l4-no-data {
+  margin-top: 4px; padding: 10px 14px;
+  background: #f8f9fa; border-radius: 8px;
+  font-size: 13px; color: #aaa; text-align: center;
+}
 
 /* Skeleton option in dropdown */
 .skeleton-filter-bar { display: flex; gap: 8px; margin-top: 12px; }
@@ -563,4 +1021,20 @@ onMounted(() => {
 .result-section.backup .section-title-text { color: #e6a700; }
 
 .result-actions { display: flex; gap: 12px; justify-content: center; padding-top: 16px; border-top: 1px solid #f0f0f0; }
+
+/* Batch mode */
+.batch-toggle { margin-top: 12px; padding: 10px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #f093fb; }
+.batch-toggle-label { font-size: 14px; font-weight: 500; color: #333; }
+.batch-toggle-hint { font-size: 12px; color: #999; margin-left: 8px; }
+.batch-group { padding: 12px; margin-bottom: 12px; background: #fafbfc; border-radius: 8px; border: 1px solid #eee; }
+.batch-group-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.batch-group-num { font-size: 13px; font-weight: 600; color: #f093fb; }
+.add-batch-btn { margin-top: 4px; }
+
+/* Result tabs */
+.result-tabs { margin-top: 16px; }
+.result-tabs :deep(.el-tabs__item) { font-size: 13px; }
+
+/* Preset bar */
+.preset-bar { display: flex; align-items: center; gap: 12px; }
 </style>

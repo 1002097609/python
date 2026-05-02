@@ -99,6 +99,8 @@
             <div class="sk-footer">
               <span class="sk-date">{{ formatDate(sk.created_at) }}</span>
               <div class="sk-actions" @click.stop>
+                <el-button type="success" link size="small" @click="openTrendDialog(sk)">📊 趋势</el-button>
+                <el-button type="info" link size="small" @click="openEditDialog(sk)">编辑</el-button>
                 <el-button type="primary" link size="small" @click="goFission(sk)">去裂变 →</el-button>
                 <el-button type="danger" link size="small" @click="handleDelete(sk)">删除</el-button>
               </div>
@@ -218,17 +220,88 @@
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="info" v-if="currentSkeleton" @click="detailVisible = false; openEditDialog(currentSkeleton)">编辑</el-button>
+        <el-button type="success" v-if="currentSkeleton" @click="detailVisible = false; openTrendDialog(currentSkeleton)">📊 效果趋势</el-button>
         <el-button type="primary" v-if="currentSkeleton" @click="goFissionFromDetail">去裂变 →</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 编辑骨架弹窗 -->
+    <el-dialog v-model="editDialogVisible" title="编辑骨架" width="560px" destroy-on-close>
+      <el-form :model="editForm" label-width="90px">
+        <el-form-item label="名称">
+          <el-input v-model="editForm.name" placeholder="骨架名称" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="类型">
+              <el-select v-model="editForm.skeleton_type" placeholder="选择类型" style="width:100%">
+                <el-option v-for="t in skeletonTypes" :key="t" :label="t" :value="t" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="平台">
+              <el-select v-model="editForm.platform" placeholder="选择平台" clearable style="width:100%">
+                <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="策略描述">
+          <el-input v-model="editForm.strategy_desc" type="textarea" :rows="3" placeholder="策略描述" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmEdit" :loading="editLoading">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 效果趋势弹窗 -->
+    <el-dialog v-model="trendDialogVisible" title="骨架效果趋势" width="800px" destroy-on-close>
+      <div v-if="trendSkeleton" class="trend-body">
+        <div class="trend-header">
+          <span class="trend-name">{{ trendSkeleton.name }}</span>
+          <div class="trend-stats">
+            <span class="tstat">💰 平均 ROI <strong>{{ trendSkeleton.avg_roi ? Number(trendSkeleton.avg_roi).toFixed(1) + 'x' : '—' }}</strong></span>
+            <span class="tstat">📈 平均 CTR <strong>{{ trendSkeleton.avg_ctr ? Number(trendSkeleton.avg_ctr).toFixed(1) + '%' : '—' }}</strong></span>
+            <span class="tstat">🔄 使用 <strong>{{ trendSkeleton.usage_count || 0 }}</strong> 次</span>
+          </div>
+        </div>
+        <div v-if="trendEffects.length > 0">
+          <div ref="trendChartRef" class="trend-chart"></div>
+          <el-table :data="trendEffects" size="small" stripe style="margin-top:12px">
+            <el-table-column prop="stat_date" label="日期" width="110" />
+            <el-table-column prop="platform" label="平台" width="90" />
+            <el-table-column prop="impressions" label="曝光" width="90" />
+            <el-table-column prop="clicks" label="点击" width="80" />
+            <el-table-column label="CTR" width="80">
+              <template #default="{ row }">{{ row.ctr ? row.ctr + '%' : '—' }}</template>
+            </el-table-column>
+            <el-table-column label="ROI" width="80">
+              <template #default="{ row }">{{ row.roi ? row.roi + 'x' : '—' }}</template>
+            </el-table-column>
+            <el-table-column label="花费" width="90">
+              <template #default="{ row }">{{ row.cost ? '¥' + row.cost : '—' }}</template>
+            </el-table-column>
+            <el-table-column label="收入" width="90">
+              <template #default="{ row }">{{ row.revenue ? '¥' + row.revenue : '—' }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <el-empty v-else description="暂无效果数据" :image-size="80" />
+      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { importSkeletons, exportSkeletons } from '../api'
+import * as echarts from 'echarts'
+import api, { importSkeletons, exportSkeletons, getFissionEffects } from '../api'
 
 const router = useRouter()
 
@@ -410,6 +483,101 @@ const handleExportSkeleton = (format) => {
   exportSkeletons(format, params)
 }
 
+// ---- 编辑骨架 ----
+const editDialogVisible = ref(false)
+const editLoading = ref(false)
+const editForm = reactive({
+  id: null,
+  name: '',
+  skeleton_type: '',
+  platform: '',
+  strategy_desc: '',
+})
+
+const openEditDialog = (sk) => {
+  editForm.id = sk.id
+  editForm.name = sk.name || ''
+  editForm.skeleton_type = sk.skeleton_type || ''
+  editForm.platform = sk.platform || ''
+  editForm.strategy_desc = sk.strategy_desc || ''
+  editDialogVisible.value = true
+}
+
+const confirmEdit = async () => {
+  if (!editForm.name) { ElMessage.warning('请输入骨架名称'); return }
+  editLoading.value = true
+  try {
+    await api.put(`/skeleton/${editForm.id}`, editForm)
+    ElMessage.success('骨架已更新')
+    editDialogVisible.value = false
+    await Promise.all([fetchSkeletons(), fetchAllSkeletons()])
+  } catch (e) {
+    ElMessage.error('更新失败')
+  }
+  editLoading.value = false
+}
+
+// ---- 效果趋势 ----
+const trendDialogVisible = ref(false)
+const trendSkeleton = ref(null)
+const trendEffects = ref([])
+const trendChartRef = ref(null)
+let trendChart = null
+
+const openTrendDialog = async (sk) => {
+  trendSkeleton.value = sk
+  trendEffects.value = []
+  trendDialogVisible.value = true
+  // 加载该骨架关联的所有裂变记录的效果数据
+  try {
+    const { data } = await api.get('/fission/', { params: { skeleton_id: sk.id, page_size: 100 } })
+    const fissions = Array.isArray(data) ? data : (data.items || [])
+    const allEffects = []
+    for (const f of fissions) {
+      try {
+        const effs = await getFissionEffects(f.id)
+        allEffects.push(...effs)
+      } catch { /* skip */ }
+    }
+    allEffects.sort((a, b) => (a.stat_date || '').localeCompare(b.stat_date || ''))
+    trendEffects.value = allEffects
+    await nextTick()
+    initTrendChart()
+  } catch (e) {
+    console.error('加载效果趋势失败', e)
+  }
+}
+
+function initTrendChart() {
+  if (!trendChartRef.value || trendEffects.value.length === 0) return
+  if (trendChart) { trendChart.dispose(); trendChart = null }
+  trendChart = echarts.init(trendChartRef.value)
+  const dates = trendEffects.value.map(e => e.stat_date)
+  const roiData = trendEffects.value.map(e => e.roi)
+  const ctrData = trendEffects.value.map(e => e.ctr)
+  trendChart.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['ROI', 'CTR'], top: 0 },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '36px', containLabel: true },
+    xAxis: { type: 'category', data: dates, axisLabel: { rotate: 30 } },
+    yAxis: [
+      { type: 'value', name: 'ROI (x)', position: 'left' },
+      { type: 'value', name: 'CTR (%)', position: 'right' },
+    ],
+    series: [
+      { name: 'ROI', type: 'line', smooth: true, data: roiData, itemStyle: { color: '#43e97b' },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(67,233,123,.3)' }, { offset: 1, color: 'rgba(67,233,123,.02)' }] } } },
+      { name: 'CTR', type: 'line', smooth: true, yAxisIndex: 1, data: ctrData, itemStyle: { color: '#667eea' },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(102,126,234,.3)' }, { offset: 1, color: 'rgba(102,126,234,.02)' }] } } },
+    ],
+  })
+}
+
+// 趋势弹窗关闭时清理图表
+watch(trendDialogVisible, (val) => {
+  if (!val && trendChart) { trendChart.dispose(); trendChart = null }
+})
+
 onMounted(async () => {
   await fetchAllSkeletons()
   await fetchSkeletons()
@@ -519,4 +687,13 @@ onMounted(async () => {
 .element-icon { font-size: 20px; margin-bottom: 4px; }
 .element-label { font-size: 12px; color: #999; }
 .element-value { font-size: 13px; color: #333; margin-top: 4px; line-height: 1.6; }
+
+/* Trend dialog */
+.trend-body { display: flex; flex-direction: column; gap: 16px; }
+.trend-header { display: flex; flex-direction: column; gap: 8px; }
+.trend-name { font-size: 16px; font-weight: 600; color: #333; }
+.trend-stats { display: flex; gap: 16px; flex-wrap: wrap; }
+.tstat { font-size: 13px; color: #666; }
+.tstat strong { color: #27ae60; margin: 0 2px; }
+.trend-chart { width: 100%; height: 280px; }
 </style>

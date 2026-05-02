@@ -10,21 +10,21 @@
       <div class="stat-card stat-total" :class="{ active: filterStatus === null }" @click="filterStatus = null">
         <div class="stat-icon">📦</div>
         <div class="stat-info">
-          <div class="stat-num">{{ materials.length }}</div>
+          <div class="stat-num">{{ stats.total }}</div>
           <div class="stat-label">素材总数</div>
         </div>
       </div>
       <div class="stat-card stat-pending" :class="{ active: filterStatus === 0 }" @click="filterStatus = 0">
         <div class="stat-icon">⏳</div>
         <div class="stat-info">
-          <div class="stat-num">{{ pendingCount }}</div>
+          <div class="stat-num">{{ stats.pending }}</div>
           <div class="stat-label">{{ statusText(0) }}</div>
         </div>
       </div>
       <div class="stat-card stat-done" :class="{ active: filterStatus === 1 }" @click="filterStatus = 1">
         <div class="stat-icon">✅</div>
         <div class="stat-info">
-          <div class="stat-num">{{ doneCount }}</div>
+          <div class="stat-num">{{ stats.done }}</div>
           <div class="stat-label">{{ statusText(1) }}</div>
         </div>
       </div>
@@ -41,7 +41,7 @@
           <el-select v-model="filterPlatform" placeholder="平台" clearable style="width:120px">
             <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
           </el-select>
-          <el-select v-model="filterTagId" placeholder="按标签筛选" clearable style="width:140px">
+          <el-select v-model="filterTagIds" placeholder="按标签筛选" clearable multiple collapse-tags style="width:160px">
             <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
           <el-input v-model="searchKeyword" placeholder="搜索标题..." style="width:200px" clearable />
@@ -67,6 +67,10 @@
             <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
           <el-button type="primary" size="small" @click="batchAddTag" :loading="batchLoading">添加标签</el-button>
+          <el-select v-model="batchStatus" placeholder="批量改状态" size="small" style="width:140px">
+            <el-option v-for="opt in options.material_status" :key="opt.value" :label="opt.label" :value="Number(opt.value)" />
+          </el-select>
+          <el-button type="warning" size="small" @click="batchUpdateStatus" :loading="batchLoading">更新状态</el-button>
           <el-button type="danger" size="small" @click="batchDelete" :loading="batchLoading">批量删除</el-button>
         </div>
       </div>
@@ -180,9 +184,40 @@
             </el-select>
           </div>
         </div>
+        <!-- 关联拆解 -->
+        <div class="detail-row detail-block" v-if="linkedDismantle">
+          <span class="detail-label">关联拆解</span>
+          <div class="linked-info">
+            <div class="linked-row"><span class="linked-label">L1 主题：</span><span class="linked-val">{{ linkedDismantle.l1_topic || '—' }}</span></div>
+            <div class="linked-row"><span class="linked-label">L2 策略：</span>
+              <el-tag v-for="s in (linkedDismantle.l2_strategy || [])" :key="s" size="small" type="primary" style="margin-right:4px">{{ s }}</el-tag>
+              <span v-if="!linkedDismantle.l2_strategy?.length" class="text-muted">—</span>
+            </div>
+            <div class="linked-row"><span class="linked-label">L3 结构：</span><span class="linked-val">{{ (linkedDismantle.l3_structure || []).map(s => s.name).join(' → ') || '—' }}</span></div>
+            <el-button type="primary" link size="small" @click="goDismantleFromDetail" style="margin-top:4px">查看完整拆解 →</el-button>
+          </div>
+        </div>
+
+        <!-- 关联裂变记录 -->
+        <div class="detail-row detail-block" v-if="linkedFissions.length > 0">
+          <span class="detail-label">关联裂变 ({{ linkedFissions.length }})</span>
+          <div class="linked-fissions">
+            <div v-for="f in linkedFissions" :key="f.id" class="fission-item">
+              <span class="fission-title">{{ f.output_title || '未命名' }}</span>
+              <el-tag size="small" :type="f.actual_roi ? 'success' : 'info'">
+                {{ f.actual_roi ? `ROI ${f.actual_roi}x` : '未回写' }}
+              </el-tag>
+              <span class="fission-date">{{ f.created_at ? f.created_at.substring(0, 10) : '' }}</span>
+            </div>
+          </div>
+        </div>
+
         <div class="detail-row detail-block">
           <span class="detail-label">素材内容</span>
-          <pre class="detail-content">{{ currentMaterial.content || '（空）' }}</pre>
+          <pre class="detail-content" :class="{ collapsed: contentCollapsed }">{{ currentMaterial.content || '（空）' }}</pre>
+          <el-button v-if="currentMaterial.content && currentMaterial.content.length > 200" type="primary" link size="small" @click="contentCollapsed = !contentCollapsed" style="margin-top:4px">
+            {{ contentCollapsed ? '展开全部' : '收起' }}
+          </el-button>
         </div>
       </div>
       <template #footer>
@@ -206,7 +241,7 @@ const loading = ref(false)
 const searchKeyword = ref('')
 const filterPlatform = ref('')
 const filterStatus = ref(null)
-const filterTagId = ref(null)
+const filterTagIds = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const totalCount = ref(0)
@@ -216,10 +251,14 @@ const detailVisible = ref(false)
 const currentMaterial = ref(null)
 const currentMaterialTags = ref([])
 const selectedTagForAdd = ref(null)
+const contentCollapsed = ref(true)
+const linkedDismantle = ref(null)
+const linkedFissions = ref([])
 
 // 批量操作
 const selection = ref([])
 const batchTagId = ref(null)
+const batchStatus = ref(null)
 const batchLoading = ref(false)
 const tableRef = ref(null)
 
@@ -242,8 +281,21 @@ const platforms = computed(() => {
   return opts.map(o => o.value || o.label).filter(Boolean)
 })
 
-const pendingCount = computed(() => materials.value.filter(m => m.status === 0).length)
-const doneCount = computed(() => materials.value.filter(m => m.status === 1).length)
+const stats = ref({ total: 0, pending: 0, done: 0 })
+
+const fetchStats = async () => {
+  try {
+    const { data } = await api.get('/dashboard/overview')
+    const mat = data?.material || {}
+    stats.value = {
+      total: mat.total ?? 0,
+      pending: mat.pending ?? 0,
+      done: mat.done ?? 0,
+    }
+  } catch (e) {
+    console.error('加载统计失败', e)
+  }
+}
 
 const statusText = (s) => {
   const opt = (options.value.material_status || []).find(o => Number(o.value) === s)
@@ -264,7 +316,7 @@ const fetchMaterials = async () => {
     const params = { page: page.value, page_size: pageSize.value }
     if (filterPlatform.value) params.platform = filterPlatform.value
     if (filterStatus.value !== null) params.status = filterStatus.value
-    if (filterTagId.value != null) params.tag_id = filterTagId.value
+    if (filterTagIds.value.length > 0) params.tag_ids = filterTagIds.value.join(',')
     if (searchKeyword.value) params.keyword = searchKeyword.value
     const { data } = await api.get('/material/', { params })
     if (Array.isArray(data)) {
@@ -285,7 +337,7 @@ const fetchMaterials = async () => {
 }
 
 // 筛选变化时重新加载
-watch([filterPlatform, filterStatus, filterTagId, searchKeyword], () => {
+watch([filterPlatform, filterStatus, filterTagIds, searchKeyword], () => {
   page.value = 1
   fetchMaterials()
 })
@@ -297,9 +349,22 @@ const onSelectionChange = (sel) => {
 const viewDetail = async (row) => {
   currentMaterial.value = row
   detailVisible.value = true
+  contentCollapsed.value = true
   const tags = await getMaterialTags(row.id)
   currentMaterialTags.value = tags
   materialTagsMap.value[row.id] = tags
+  // 加载关联拆解
+  linkedDismantle.value = null
+  linkedFissions.value = []
+  try {
+    const { data } = await api.get(`/dismantle/by-material/${row.id}`)
+    linkedDismantle.value = data
+  } catch { /* 未拆解 */ }
+  // 加载关联裂变
+  try {
+    const { data } = await api.get('/fission/', { params: { source_material_id: row.id, page_size: 100 } })
+    linkedFissions.value = Array.isArray(data) ? data : (data.items || [])
+  } catch { /* 无裂变记录 */ }
 }
 
 const goDismantle = (row) => {
@@ -348,6 +413,26 @@ const batchAddTag = async () => {
   batchLoading.value = false
   ElMessage.success(`已为 ${success} 个素材添加标签`)
   batchTagId.value = null
+}
+
+const batchUpdateStatus = async () => {
+  if (batchStatus.value === null) {
+    ElMessage.warning('请选择目标状态')
+    return
+  }
+  if (!selection.value.length) return
+  batchLoading.value = true
+  try {
+    const ids = selection.value.map(r => r.id)
+    const res = await api.put('/material/batch/status', { ids, status: batchStatus.value })
+    ElMessage.success(`已更新 ${res.updated} 个素材的状态`)
+    batchStatus.value = null
+    selection.value = []
+    await fetchMaterials()
+  } catch (e) {
+    ElMessage.error('状态更新失败')
+  }
+  batchLoading.value = false
 }
 
 const batchDelete = async () => {
@@ -448,6 +533,7 @@ onMounted(() => {
   fetchMaterials()
   fetchOptions()
   fetchTags()
+  fetchStats()
 })
 </script>
 
@@ -509,4 +595,17 @@ onMounted(() => {
   background: #f8f9fa; padding: 14px; border-radius: 8px; width: 100%;
   max-height: 300px; overflow-y: auto;
 }
+.detail-content.collapsed { max-height: 120px; overflow-y: hidden; position: relative; }
+.detail-content.collapsed::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 40px;
+  background: linear-gradient(transparent, #f8f9fa);
+}
+.linked-info { display: flex; flex-direction: column; gap: 6px; }
+.linked-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.linked-label { color: #999; min-width: 60px; flex-shrink: 0; }
+.linked-val { color: #333; }
+.linked-fissions { display: flex; flex-direction: column; gap: 6px; }
+.fission-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #f8f9fa; border-radius: 6px; }
+.fission-title { flex: 1; font-size: 13px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fission-date { font-size: 12px; color: #bbb; }
 </style>

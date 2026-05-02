@@ -250,6 +250,489 @@ def seed():
 # ============================================================
 # 直接运行入口
 # ============================================================
+# ============================================================
+# 裂变预设种子数据
+# ============================================================
+
+FISSION_PRESETS = [
+    # ── 快消品 ──
+    {
+        "name": "零食推荐",
+        "description": "零食类商品推荐模板，强调口感、性价比、复购",
+        "config_json": {
+            "new_category": "零食",
+            "new_style": "亲和力",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["这个细节99%的人都忽略了", "性价比天花板", "回购了5次的好物"],
+                    "data_refs": ["复购率达到65%", "满意度评分4.8/5.0"],
+                    "visual_desc": ["产品全景展示", "细节特写镜头"],
+                },
+                "L4": {
+                    "hook": "我踩了N个坑才找到",
+                    "transition": "但是重点来了",
+                    "interaction": "评论区告诉我你的情况",
+                },
+            },
+        },
+        "sort_order": 1,
+    },
+    {
+        "name": "护肤测评",
+        "description": "护肤类商品测评对比模板，强调成分、功效、实测",
+        "config_json": {
+            "new_category": "护肤",
+            "new_style": "成分党",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["用了3年才发现这个方法", "闭眼入不会错"],
+                    "data_refs": ["90%的用户反馈有效", "连续使用28天效果显著"],
+                    "visual_desc": ["使用前后对比", "成分/参数特写"],
+                },
+                "L4": {
+                    "hook": "90%的人都忽略了这个问题",
+                    "transition": "接下来才是关键",
+                    "interaction": "你用过哪款？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 2,
+    },
+    {
+        "name": "彩妆种草",
+        "description": "彩妆类商品种草模板，强调妆感、持妆、性价比",
+        "config_json": {
+            "new_category": "彩妆",
+            "new_style": "温柔种草",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["回购了5次的好物", "用了就回不去了", "平价替代天花板"],
+                    "data_refs": ["持妆时长12小时", "满意度评分4.8/5.0"],
+                    "visual_desc": ["细节特写镜头", "使用前后对比"],
+                },
+                "L4": {
+                    "hook": "别再踩我一样的坑了",
+                    "transition": "划重点",
+                    "interaction": "点赞收藏慢慢看",
+                },
+            },
+        },
+        "sort_order": 3,
+    },
+    {
+        "name": "母婴好物",
+        "description": "母婴类商品推荐模板，强调安全、实用、口碑",
+        "config_json": {
+            "new_category": "母婴",
+            "new_style": "亲和力",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["后悔没早点知道", "专业人士都在用", "0不良反应报告"],
+                    "data_refs": ["90%的用户反馈有效", "经过3个月实测验证"],
+                    "visual_desc": ["场景化使用展示", "真人试用展示"],
+                },
+                "L4": {
+                    "hook": "当妈之后才知道这些坑",
+                    "transition": "划重点",
+                    "interaction": "宝妈们评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 4,
+    },
+    {
+        "name": "食品饮料",
+        "description": "食品饮料类商品模板，强调口感、健康、场景",
+        "config_json": {
+            "new_category": "食品饮料",
+            "new_style": "接地气",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["这个细节99%的人都忽略了", "性价比天花板", "闭眼入不会错"],
+                    "data_refs": ["复购率达到65%", "0不良反应报告"],
+                    "visual_desc": ["产品全景展示", "场景化使用展示"],
+                },
+                "L4": {
+                    "hook": "别再踩我踩过的坑了",
+                    "transition": "但是重点来了",
+                    "interaction": "你吃过哪款？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 5,
+    },
+    # ── 耐用品 ──
+    {
+        "name": "数码测评",
+        "description": "数码类商品测评模板，强调参数、性能、对比",
+        "config_json": {
+            "new_category": "数码",
+            "new_style": "科技感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["对比了10款之后的选择", "性价比天花板", "这个细节99%的人都忽略了"],
+                    "data_refs": ["对比同类产品性价比高出30%", "有效成分含量达95%"],
+                    "visual_desc": ["细节特写镜头", "同类产品横向对比", "数据图表可视化"],
+                },
+                "L4": {
+                    "hook": "花了一个月测试出来的结论",
+                    "transition": "接下来才是关键",
+                    "interaction": "你用过哪款？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 6,
+    },
+    {
+        "name": "家电推荐",
+        "description": "家电类商品推荐模板，强调功能、体验、性价比",
+        "config_json": {
+            "new_category": "家电",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["用了3年才发现这个方法", "专业人士都在用", "比传统方案节省50%时间"],
+                    "data_refs": ["每单位成本降低40%", "使用周期长达12个月"],
+                    "visual_desc": ["场景化使用展示", "步骤分解演示"],
+                },
+                "L4": {
+                    "hook": "90%的人都忽略了这个问题",
+                    "transition": "但是重点来了",
+                    "interaction": "评论区告诉我你的情况",
+                },
+            },
+        },
+        "sort_order": 7,
+    },
+    {
+        "name": "家居好物",
+        "description": "家居类商品推荐模板，强调实用、颜值、收纳",
+        "config_json": {
+            "new_category": "家居",
+            "new_style": "治愈系",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["用了就回不去了", "平价替代天花板", "这个细节99%的人都忽略了"],
+                    "data_refs": ["满意度评分4.8/5.0", "适用于99%的肤质/场景"],
+                    "visual_desc": ["场景化使用展示", "多角度展示"],
+                },
+                "L4": {
+                    "hook": "别再踩我一样的坑了",
+                    "transition": "划重点",
+                    "interaction": "点赞收藏慢慢看",
+                },
+            },
+        },
+        "sort_order": 8,
+    },
+    {
+        "name": "汽车选购",
+        "description": "汽车类商品选购模板，强调对比、避坑、性价比",
+        "config_json": {
+            "new_category": "汽车",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["对比了10款之后的选择", "这个细节99%的人都忽略了", "后悔没早点知道"],
+                    "data_refs": ["每单位成本降低40%", "使用周期长达12个月"],
+                    "visual_desc": ["同类产品横向对比", "细节特写镜头", "数据图表可视化"],
+                },
+                "L4": {
+                    "hook": "花了一个月测试出来的结论",
+                    "transition": "接下来才是关键",
+                    "interaction": "评论区告诉我你的预算",
+                },
+            },
+        },
+        "sort_order": 9,
+    },
+    # ── 服饰/时尚 ──
+    {
+        "name": "服饰穿搭",
+        "description": "服饰类商品穿搭模板，强调显瘦、百搭、风格",
+        "config_json": {
+            "new_category": "服饰",
+            "new_style": "亲和力",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["回购了5次的好物", "用了就回不去了", "平价替代天花板"],
+                    "data_refs": ["复购率达到65%", "满意度评分4.8/5.0"],
+                    "visual_desc": ["真人试用展示", "多角度展示"],
+                },
+                "L4": {
+                    "hook": "别再踩我一样的坑了",
+                    "transition": "但是重点来了",
+                    "interaction": "你平时穿什么风格？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 10,
+    },
+    # ── 运动/户外 ──
+    {
+        "name": "运动健身",
+        "description": "运动健身类商品模板，强调效果、坚持、专业",
+        "config_json": {
+            "new_category": "健身",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["用了3年才发现这个方法", "一次就见效", "专业人士都在用"],
+                    "data_refs": ["连续使用28天效果显著", "平均见效时间7天"],
+                    "visual_desc": ["使用前后对比", "步骤分解演示", "真人试用展示"],
+                },
+                "L4": {
+                    "hook": "90%的人都忽略了这个问题",
+                    "transition": "接下来才是关键",
+                    "interaction": "你坚持了多久？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 11,
+    },
+    {
+        "name": "户外装备",
+        "description": "户外装备类商品模板，强调耐用、轻量、实测",
+        "config_json": {
+            "new_category": "户外",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["对比了10款之后的选择", "这个细节99%的人都忽略了", "用了就回不去了"],
+                    "data_refs": ["比传统方案节省50%时间", "使用周期长达12个月"],
+                    "visual_desc": ["场景化使用展示", "细节特写镜头"],
+                },
+                "L4": {
+                    "hook": "花了一个月测试出来的结论",
+                    "transition": "但是重点来了",
+                    "interaction": "你用过哪款？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 12,
+    },
+    # ── 宠物 ──
+    {
+        "name": "宠物用品",
+        "description": "宠物用品类商品模板，强调安全、适口、口碑",
+        "config_json": {
+            "new_category": "宠物",
+            "new_style": "亲和力",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["后悔没早点知道", "用了3年才发现这个方法", "闭眼入不会错"],
+                    "data_refs": ["90%的用户反馈有效", "0不良反应报告"],
+                    "visual_desc": ["产品全景展示", "场景化使用展示"],
+                },
+                "L4": {
+                    "hook": "当铲屎官之后才知道这些坑",
+                    "transition": "划重点",
+                    "interaction": "铲屎官们评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 13,
+    },
+    # ── 教育/金融 ──
+    {
+        "name": "教育培训",
+        "description": "教育培训类商品模板，强调效果、师资、口碑",
+        "config_json": {
+            "new_category": "教育培训",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["用了3年才发现这个方法", "一次就见效", "专业人士都在用"],
+                    "data_refs": ["90%的用户反馈有效", "连续使用28天效果显著"],
+                    "visual_desc": ["数据图表可视化", "用户反馈截图"],
+                },
+                "L4": {
+                    "hook": "90%的人都忽略了这个问题",
+                    "transition": "接下来才是关键",
+                    "interaction": "你学过吗？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 14,
+    },
+    {
+        "name": "金融理财",
+        "description": "金融理财类商品模板，强调安全、收益、风险",
+        "config_json": {
+            "new_category": "金融理财",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["这个细节99%的人都忽略了", "后悔没早点知道", "对比了10款之后的选择"],
+                    "data_refs": ["对比同类产品性价比高出30%", "满意度评分4.8/5.0"],
+                    "visual_desc": ["数据图表可视化", "文字标注说明"],
+                },
+                "L4": {
+                    "hook": "别再踩我踩过的坑了",
+                    "transition": "划重点",
+                    "interaction": "评论区告诉我你的情况",
+                },
+            },
+        },
+        "sort_order": 15,
+    },
+    # ── 医疗/健康 ──
+    {
+        "name": "医疗健康",
+        "description": "医疗健康类商品模板，强调安全、有效、专业",
+        "config_json": {
+            "new_category": "医疗健康",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["专业人士都在用", "用了3年才发现这个方法", "0不良反应报告"],
+                    "data_refs": ["90%的用户反馈有效", "经过3个月实测验证"],
+                    "visual_desc": ["使用前后对比", "成分/参数特写"],
+                },
+                "L4": {
+                    "hook": "90%的人都忽略了这个问题",
+                    "transition": "接下来才是关键",
+                    "interaction": "你用过哪款？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 16,
+    },
+    # ── 旅游/房产 ──
+    {
+        "name": "旅游出行",
+        "description": "旅游出行类商品模板，强调攻略、避坑、体验",
+        "config_json": {
+            "new_category": "旅游出行",
+            "new_style": "攻略型",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["对比了10款之后的选择", "这个细节99%的人都忽略了", "后悔没早点知道"],
+                    "data_refs": ["满意度评分4.8/5.0", "比传统方案节省50%时间"],
+                    "visual_desc": ["场景化使用展示", "多角度展示"],
+                },
+                "L4": {
+                    "hook": "别再踩我踩过的坑了",
+                    "transition": "划重点",
+                    "interaction": "你去过哪？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 17,
+    },
+    {
+        "name": "房产家居",
+        "description": "房产类商品模板，强调地段、性价比、避坑",
+        "config_json": {
+            "new_category": "房产",
+            "new_style": "专业感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["这个细节99%的人都忽略了", "对比了10款之后的选择", "后悔没早点知道"],
+                    "data_refs": ["每单位成本降低40%", "使用周期长达12个月"],
+                    "visual_desc": ["同类产品横向对比", "细节特写镜头"],
+                },
+                "L4": {
+                    "hook": "花了一个月测试出来的结论",
+                    "transition": "接下来才是关键",
+                    "interaction": "评论区告诉我你的预算",
+                },
+            },
+        },
+        "sort_order": 18,
+    },
+    # ── 游戏/文化娱乐 ──
+    {
+        "name": "游戏推荐",
+        "description": "游戏类商品推荐模板，强调体验、画质、性价比",
+        "config_json": {
+            "new_category": "游戏",
+            "new_style": "科技感",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["用了就回不去了", "这个细节99%的人都忽略了", "性价比天花板"],
+                    "data_refs": ["满意度评分4.8/5.0", "适用于99%的肤质/场景"],
+                    "visual_desc": ["场景化使用展示", "细节特写镜头"],
+                },
+                "L4": {
+                    "hook": "别再踩我一样的坑了",
+                    "transition": "但是重点来了",
+                    "interaction": "你玩过哪款？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 19,
+    },
+    {
+        "name": "文化娱乐",
+        "description": "文化娱乐类商品模板，强调口碑、体验、推荐",
+        "config_json": {
+            "new_category": "文化娱乐",
+            "new_style": "亲和力",
+            "new_platform": "",
+            "replacement": {
+                "L5": {
+                    "golden_sentences": ["回购了5次的好物", "用了就回不去了", "闭眼入不会错"],
+                    "data_refs": ["复购率达到65%", "满意度评分4.8/5.0"],
+                    "visual_desc": ["产品全景展示", "用户反馈截图"],
+                },
+                "L4": {
+                    "hook": "当妈之后才知道这些坑",
+                    "transition": "划重点",
+                    "interaction": "你看过吗？评论区聊聊",
+                },
+            },
+        },
+        "sort_order": 20,
+    },
+]
+
+
+def seed_presets():
+    """初始化裂变预设数据（Upsert 模式）。"""
+    from backend.models.fission_preset import FissionPreset
+    db = SessionLocal()
+    try:
+        inserted = 0
+        updated = 0
+        for preset in FISSION_PRESETS:
+            existing = db.query(FissionPreset).filter(FissionPreset.name == preset["name"]).first()
+            if existing:
+                existing.config_json = preset["config_json"]
+                existing.sort_order = preset["sort_order"]
+                updated += 1
+            else:
+                db.add(FissionPreset(**preset))
+                inserted += 1
+        db.commit()
+        print(f"[OK] 已初始化裂变预设：插入 {inserted} 条，更新 {updated} 条，共 {len(FISSION_PRESETS)} 条")
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] {e}")
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     # 当直接运行此脚本时，执行 seed() 初始化数据
     seed()
+    seed_presets()

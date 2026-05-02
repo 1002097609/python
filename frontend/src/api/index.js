@@ -98,6 +98,39 @@ export async function getFissionEffects(fissionId) {
 }
 
 // ============================================================
+// 裂变预设
+// ============================================================
+
+// 获取所有启用的预设列表
+export async function getFissionPresets() {
+  const { data } = await api.get('/fission-preset/')
+  return data
+}
+
+// 获取单个预设详情
+export async function getFissionPreset(presetId) {
+  const { data } = await api.get(`/fission-preset/${presetId}`)
+  return data
+}
+
+// 创建预设
+export async function createFissionPreset(payload) {
+  const { data } = await api.post('/fission-preset/', payload)
+  return data
+}
+
+// 更新预设
+export async function updateFissionPreset(presetId, payload) {
+  const { data } = await api.put(`/fission-preset/${presetId}`, payload)
+  return data
+}
+
+// 删除预设
+export async function deleteFissionPreset(presetId) {
+  await api.delete(`/fission-preset/${presetId}`)
+}
+
+// ============================================================
 // 裂变记录
 // ============================================================
 
