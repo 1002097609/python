@@ -12,7 +12,11 @@
   POST   /api/skeleton/from-dismantle/{id}   - 从拆解记录自动提取骨架
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import csv
+import io
+import json
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 from decimal import Decimal
@@ -241,3 +245,104 @@ def _infer_skeleton_type(l3_structure) -> str:
     if "步骤" in names_str:
         return "教程步骤型"
     return "通用型"
+
+
+@router.post("/import")
+def import_skeletons(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    批量导入骨架（JSON 格式）。
+
+    接收 JSON 文件，格式为骨架对象数组：
+    [{"name":"...", "skeleton_type":"测评对比型", "strategy_desc":"...", "structure_json":[...], "elements_json":{...}}, ...]
+
+    返回导入结果：成功数 / 跳过数（名称已存在则跳过）。
+    """
+    content = file.file.read().decode("utf-8")
+    items = json.loads(content)
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="JSON 格式错误：根节点必须是数组")
+
+    inserted = 0
+    skipped = 0
+    for item in items:
+        name = item.get("name", "").strip()
+        if not name:
+            skipped += 1
+            continue
+        existing = db.query(Skeleton).filter(Skeleton.name == name).first()
+        if existing:
+            skipped += 1
+            continue
+        db.add(Skeleton(
+            name=name,
+            skeleton_type=item.get("skeleton_type"),
+            strategy_desc=item.get("strategy_desc"),
+            structure_json=item.get("structure_json"),
+            elements_json=item.get("elements_json"),
+            style_tags=item.get("style_tags"),
+            platform=item.get("platform"),
+        ))
+        inserted += 1
+    db.commit()
+    return {"inserted": inserted, "skipped": skipped, "message": f"导入完成：新增 {inserted} 条，跳过 {skipped} 条"}
+
+
+@router.get("/export")
+def export_skeletons(
+    format: str = Query("json", pattern="^(json|csv)$"),
+    platform: Optional[str] = Query(None),
+    skeleton_type: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    导出骨架数据，支持 JSON 和 CSV 格式。
+
+    参数：
+        format: json（默认）或 csv
+        platform / skeleton_type: 可选筛选条件
+
+    返回：文件下载响应。
+    """
+    query = db.query(Skeleton)
+    if platform:
+        query = query.filter(Skeleton.platform == platform)
+    if skeleton_type:
+        query = query.filter(Skeleton.skeleton_type == skeleton_type)
+
+    items = query.order_by(Skeleton.id).all()
+    rows = []
+    for i in items:
+        rows.append({
+            "id": i.id,
+            "name": i.name,
+            "skeleton_type": i.skeleton_type,
+            "strategy_desc": i.strategy_desc,
+            "structure_json": json.dumps(i.structure_json, ensure_ascii=False) if i.structure_json else "",
+            "elements_json": json.dumps(i.elements_json, ensure_ascii=False) if i.elements_json else "",
+            "style_tags": json.dumps(i.style_tags, ensure_ascii=False) if i.style_tags else "",
+            "platform": i.platform,
+            "usage_count": i.usage_count,
+            "avg_roi": float(i.avg_roi) if i.avg_roi else None,
+            "avg_ctr": float(i.avg_ctr) if i.avg_ctr else None,
+        })
+
+    timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=rows[0].keys() if rows else ["id"])
+        writer.writeheader()
+        writer.writerows(rows)
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8-sig")),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=skeletons_{timestamp}.csv"},
+        )
+
+    # JSON
+    return StreamingResponse(
+        io.BytesIO(json.dumps(rows, ensure_ascii=False, indent=2).encode("utf-8")),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=skeletons_{timestamp}.json"},
+    )

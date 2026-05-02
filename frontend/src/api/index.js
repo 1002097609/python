@@ -201,4 +201,40 @@ export async function deleteTag(tagId) {
   await api.delete(`/tag/${tagId}`)
 }
 
+// ============================================================
+// 数据导入导出
+// ============================================================
+
+// 导入素材（JSON 文件）
+export async function importMaterials(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await api.post('/material/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+// 导出素材（触发浏览器下载）
+export function exportMaterials(format = 'json', params = {}) {
+  const query = new URLSearchParams({ format, ...params }).toString()
+  window.open(`/api/material/export?${query}`, '_blank')
+}
+
+// 导入骨架（JSON 文件）
+export async function importSkeletons(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await api.post('/skeleton/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+// 导出骨架（触发浏览器下载）
+export function exportSkeletons(format = 'json', params = {}) {
+  const query = new URLSearchParams({ format, ...params }).toString()
+  window.open(`/api/skeleton/export?${query}`, '_blank')
+}
+
 export default api

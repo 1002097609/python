@@ -45,6 +45,17 @@
             <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
           <el-input v-model="searchKeyword" placeholder="搜索标题..." style="width:200px" clearable />
+          <el-button size="small" @click="triggerImportMaterial">📥 导入</el-button>
+          <el-dropdown size="small" @command="handleExportMaterial">
+            <el-button size="small">📤 导出 ▾</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
+                <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <input ref="materialFileInput" type="file" accept=".json" style="display:none" @change="handleImportMaterial" />
         </div>
       </div>
 
@@ -186,7 +197,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMaterialTag } from '../api'
+import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMaterialTag, importMaterials, exportMaterials } from '../api'
 
 const router = useRouter()
 
@@ -403,6 +414,34 @@ const removeTag = async (materialId, tagId) => {
   } catch (e) {
     ElMessage.error('移除标签失败')
   }
+}
+
+// ---- 导入导出 ----
+const materialFileInput = ref(null)
+
+const triggerImportMaterial = () => {
+  materialFileInput.value?.click()
+}
+
+const handleImportMaterial = async (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  try {
+    const res = await importMaterials(file)
+    ElMessage.success(res.message || '导入成功')
+    await fetchMaterials()
+  } catch (err) {
+    ElMessage.error(err.response?.data?.detail || '导入失败')
+  } finally {
+    e.target.value = ''
+  }
+}
+
+const handleExportMaterial = (format) => {
+  const params = {}
+  if (filterPlatform.value) params.platform = filterPlatform.value
+  if (filterStatus.value !== null) params.status = filterStatus.value
+  exportMaterials(format, params)
 }
 
 onMounted(() => {

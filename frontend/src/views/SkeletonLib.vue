@@ -51,6 +51,17 @@
             <el-option label="平均 CTR" value="avg_ctr" />
             <el-option label="创建时间" value="created_at" />
           </el-select>
+          <el-button size="small" @click="triggerImportSkeleton">📥 导入</el-button>
+          <el-dropdown size="small" @command="handleExportSkeleton">
+            <el-button size="small">📤 导出 ▾</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
+                <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <input ref="skeletonFileInput" type="file" accept=".json" style="display:none" @change="handleImportSkeleton" />
         </div>
       </div>
 
@@ -217,7 +228,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api from '../api'
+import api, { importSkeletons, exportSkeletons } from '../api'
 
 const router = useRouter()
 
@@ -369,6 +380,35 @@ const handleDelete = async (sk) => {
 watch([filterType, filterPlatform, sortBy, searchKeyword], () => {
   page.value = 1
 })
+
+// ---- 导入导出 ----
+const skeletonFileInput = ref(null)
+
+const triggerImportSkeleton = () => {
+  skeletonFileInput.value?.click()
+}
+
+const handleImportSkeleton = async (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  try {
+    const res = await importSkeletons(file)
+    ElMessage.success(res.message || '导入成功')
+    await fetchAllSkeletons()
+    await fetchSkeletons()
+  } catch (err) {
+    ElMessage.error(err.response?.data?.detail || '导入失败')
+  } finally {
+    e.target.value = ''
+  }
+}
+
+const handleExportSkeleton = (format) => {
+  const params = {}
+  if (filterPlatform.value) params.platform = filterPlatform.value
+  if (filterType.value) params.skeleton_type = filterType.value
+  exportSkeletons(format, params)
+}
 
 onMounted(async () => {
   await fetchAllSkeletons()

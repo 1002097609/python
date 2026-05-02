@@ -12,7 +12,11 @@
   DELETE /api/material/{id}     - 删除素材
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import csv
+import io
+import json
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 from ..database import get_db
@@ -187,3 +191,104 @@ def delete_material(material_id: int, db: Session = Depends(get_db)):
 
     db.delete(material)
     db.commit()
+
+
+@router.post("/import")
+def import_materials(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    批量导入素材（JSON 格式）。
+
+    接收 JSON 文件，格式为素材对象数组：
+    [{"title":"...", "content":"...", "platform":"抖音", "category":"护肤", "media_type":"video"}, ...]
+
+    返回导入结果：成功数 / 跳过数（标题已存在则跳过）。
+    """
+    content = file.file.read().decode("utf-8")
+    items = json.loads(content)
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="JSON 格式错误：根节点必须是数组")
+
+    inserted = 0
+    skipped = 0
+    for item in items:
+        title = item.get("title", "").strip()
+        if not title:
+            skipped += 1
+            continue
+        existing = db.query(Material).filter(Material.title == title).first()
+        if existing:
+            skipped += 1
+            continue
+        db.add(Material(
+            title=title,
+            content=item.get("content", ""),
+            platform=item.get("platform", ""),
+            category=item.get("category", ""),
+            media_type=item.get("media_type", "video"),
+            source_url=item.get("source_url", ""),
+            status=item.get("status", 0),
+        ))
+        inserted += 1
+    db.commit()
+    return {"inserted": inserted, "skipped": skipped, "message": f"导入完成：新增 {inserted} 条，跳过 {skipped} 条"}
+
+
+@router.get("/export")
+def export_materials(
+    format: str = Query("json", pattern="^(json|csv)$"),
+    platform: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    status: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    导出素材数据，支持 JSON 和 CSV 格式。
+
+    参数：
+        format: json（默认）或 csv
+        platform / category / status: 可选筛选条件
+
+    返回：文件下载响应。
+    """
+    query = db.query(Material)
+    if platform:
+        query = query.filter(Material.platform == platform)
+    if category:
+        query = query.filter(Material.category == category)
+    if status is not None:
+        query = query.filter(Material.status == status)
+
+    items = query.order_by(Material.id).all()
+    rows = []
+    for i in items:
+        rows.append({
+            "id": i.id,
+            "title": i.title,
+            "content": i.content,
+            "platform": i.platform,
+            "category": i.category,
+            "media_type": i.media_type,
+            "source_url": i.source_url,
+            "status": i.status,
+        })
+
+    timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=rows[0].keys() if rows else ["id"])
+        writer.writeheader()
+        writer.writerows(rows)
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8-sig")),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=materials_{timestamp}.csv"},
+        )
+
+    # JSON
+    return StreamingResponse(
+        io.BytesIO(json.dumps(rows, ensure_ascii=False, indent=2).encode("utf-8")),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=materials_{timestamp}.json"},
+    )
