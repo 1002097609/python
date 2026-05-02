@@ -237,4 +237,14 @@ export function exportSkeletons(format = 'json', params = {}) {
   window.open(`/api/skeleton/export?${query}`, '_blank')
 }
 
+// ============================================================
+// 操作日志
+// ============================================================
+
+// 查询操作日志
+export async function getOperationLogs(params = {}) {
+  const { data } = await api.get('/operation-log/', { params })
+  return data
+}
+
 export default api

@@ -20,6 +20,7 @@ from ..models.fission import Fission
 from ..models.skeleton import Skeleton
 from ..models.effect_data import EffectData
 from ..services.fission_engine import generate_output
+from ..services.operation_log import log_operation
 
 # 创建裂变引擎专用路由器
 router = APIRouter()
@@ -131,6 +132,13 @@ def execute_fission(data: FissionRequest, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(fission)
+    log_operation(db, "fission", fission.id, "create", {
+        "skeleton_id": data.skeleton_id,
+        "fission_mode": data.fission_mode,
+        "new_topic": data.new_topic,
+        "predicted_ctr": prediction["ctr"],
+        "predicted_roi": prediction["roi"],
+    })
 
     return {
         "fission_id": fission.id,
@@ -304,6 +312,7 @@ def update_fission_status(fission_id: int, status: int, db: Session = Depends(ge
     db.refresh(item)
 
     status_names = {0: "草稿", 1: "待审核", 2: "已采用", 3: "已投放"}
+    log_operation(db, "fission", fission_id, "status_change", {"from": current, "to": status})
     return {
         "id": item.id,
         "output_status": item.output_status,
@@ -330,6 +339,7 @@ def delete_fission(fission_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="裂变记录不存在")
     db.delete(item)
     db.commit()
+    log_operation(db, "fission", fission_id, "delete", {"title": item.output_title})
     return {"message": "删除成功"}
 
 

@@ -22,6 +22,7 @@ from .fission import Fission
 from .effect_data import EffectData
 from .tag import Tag, MaterialTag
 from .option import Option
+from .operation_log import OperationLog
 
 # __all__ 控制 `from backend.models import *` 时导出的符号
-__all__ = ["Material", "Dismantle", "Skeleton", "Fission", "EffectData", "Tag", "MaterialTag", "Option"]
+__all__ = ["Material", "Dismantle", "Skeleton", "Fission", "EffectData", "Tag", "MaterialTag", "Option", "OperationLog"]

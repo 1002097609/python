@@ -22,6 +22,7 @@ from typing import Optional
 from ..database import get_db
 from ..models.material import Material
 from ..schemas.material import MaterialCreate, MaterialUpdate, MaterialResponse
+from ..services.operation_log import log_operation
 
 # 创建素材管理专用路由器
 router = APIRouter()
@@ -44,8 +45,9 @@ def create_material(data: MaterialCreate, db: Session = Depends(get_db)):
     # 将 Pydantic 模型数据转为字典后直接解构为 ORM 模型实例
     material = Material(**data.model_dump())
     db.add(material)
-    db.commit()       # 提交事务，写入数据库
-    db.refresh(material)  # 刷新实例，获取数据库自动生成的字段（如 id、created_at）
+    db.commit()
+    db.refresh(material)
+    log_operation(db, "material", material.id, "create", {"title": material.title, "platform": material.platform, "category": material.category})
     return material
 
 
@@ -147,11 +149,13 @@ def update_material(material_id: int, data: MaterialUpdate, db: Session = Depend
         raise HTTPException(status_code=404, detail="素材不存在")
 
     # 使用 exclude_unset=True 仅获取调用方实际传入的字段，实现部分更新
-    for key, value in data.model_dump(exclude_unset=True).items():
+    changed_fields = data.model_dump(exclude_unset=True)
+    for key, value in changed_fields.items():
         setattr(material, key, value)
 
     db.commit()
     db.refresh(material)
+    log_operation(db, "material", material.id, "update", {"changed_fields": list(changed_fields.keys())})
     return material
 
 
@@ -189,8 +193,10 @@ def delete_material(material_id: int, db: Session = Depends(get_db)):
             db.query(Skeleton).filter(Skeleton.id == dm.skeleton_id).delete()
         db.delete(dm)
 
+    title = material.title
     db.delete(material)
     db.commit()
+    log_operation(db, "material", material_id, "delete", {"title": title})
 
 
 @router.post("/import")
@@ -230,6 +236,7 @@ def import_materials(file: UploadFile = File(...), db: Session = Depends(get_db)
         ))
         inserted += 1
     db.commit()
+    log_operation(db, "material", 0, "import", {"inserted": inserted, "skipped": skipped})
     return {"inserted": inserted, "skipped": skipped, "message": f"导入完成：新增 {inserted} 条，跳过 {skipped} 条"}
 
 
@@ -273,6 +280,7 @@ def export_materials(
         })
 
     timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_operation(db, "material", 0, "export", {"format": format, "count": len(rows)})
 
     if format == "csv":
         output = io.StringIO()

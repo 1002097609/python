@@ -24,6 +24,7 @@ from .options import router as options_router
 from .option import router as option_router
 from .tag import router as tag_router
 from .dashboard import router as dashboard_router
+from .operation_log import router as operation_log_router
 
 # 创建统一的 API 路由器，所有子路由统一使用 /api 前缀
 api_router = APIRouter(prefix="/api")
@@ -54,3 +55,6 @@ api_router.include_router(tag_router, prefix="/tag", tags=["标签管理"])
 
 # 注册数据统计仪表盘路由：聚合统计接口
 api_router.include_router(dashboard_router, tags=["数据统计"])
+
+# 注册操作日志路由
+api_router.include_router(operation_log_router, prefix="/operation-log", tags=["操作日志"])

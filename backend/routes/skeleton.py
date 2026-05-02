@@ -22,6 +22,7 @@ from typing import Optional
 from decimal import Decimal
 from ..database import get_db
 from ..models.skeleton import Skeleton
+from ..services.operation_log import log_operation
 
 # 创建骨架库专用路由器
 router = APIRouter()
@@ -148,8 +149,11 @@ def delete_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
         db.query(EffectData).filter(EffectData.fission_id == ff.id).delete()
     db.query(Fission).filter(Fission.skeleton_id == skeleton_id).delete()
 
+    name = skeleton.name
+    fissions_count = len(fissions)
     db.delete(skeleton)
     db.commit()
+    log_operation(db, "skeleton", skeleton_id, "delete", {"name": name, "cascade_fissions": fissions_count})
 
 
 @router.post("/from-dismantle/{dismantle_id}")
@@ -201,6 +205,7 @@ def create_skeleton_from_dismantle(dismantle_id: int, db: Session = Depends(get_
 
     db.commit()
     db.refresh(skeleton)
+    log_operation(db, "skeleton", skeleton.id, "create", {"name": name, "skeleton_type": skeleton_type, "source_dismantle_id": dismantle_id})
     return {"skeleton_id": skeleton.id, "name": name, "message": "骨架提取成功"}
 
 
@@ -284,6 +289,7 @@ def import_skeletons(file: UploadFile = File(...), db: Session = Depends(get_db)
         ))
         inserted += 1
     db.commit()
+    log_operation(db, "skeleton", 0, "import", {"inserted": inserted, "skipped": skipped})
     return {"inserted": inserted, "skipped": skipped, "message": f"导入完成：新增 {inserted} 条，跳过 {skipped} 条"}
 
 
@@ -327,6 +333,7 @@ def export_skeletons(
         })
 
     timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_operation(db, "skeleton", 0, "export", {"format": format, "count": len(rows)})
 
     if format == "csv":
         output = io.StringIO()
