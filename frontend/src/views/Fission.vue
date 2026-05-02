@@ -283,6 +283,7 @@
                   <el-option v-for="p in presetList" :key="p.id" :label="p.name" :value="p.id" />
                 </el-select>
                 <el-button type="primary" link size="small" @click="openSavePreset">💾 保存当前为预设</el-button>
+                <el-button type="warning" link size="small" @click="openEditPreset" :disabled="!selectedPreset">✏️ 编辑预设</el-button>
                 <el-button type="danger" link size="small" @click="deletePreset" :disabled="!selectedPreset">🗑️ 删除预设</el-button>
               </div>
             </div>
@@ -409,7 +410,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getOptions, getFissionPresets, createFissionPreset, deleteFissionPreset } from '../api'
+import api, { getOptions, getFissionPresets, createFissionPreset, updateFissionPreset, deleteFissionPreset } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -786,6 +787,28 @@ const openSavePreset = async () => {
     await fetchPresets()
   } catch (e) {
     ElMessage.error('保存预设失败')
+  }
+}
+
+const openEditPreset = async () => {
+  if (!selectedPreset.value) return
+  const preset = presetList.value.find(p => String(p.id) === String(selectedPreset.value))
+  if (!preset) return
+  const config = preset.config_json || {}
+  try {
+    await updateFissionPreset(preset.id, {
+      name: preset.name,
+      config_json: {
+        new_category: fissionForm.new_category ?? config.new_category,
+        new_style: fissionForm.new_style ?? config.new_style,
+        new_platform: fissionForm.new_platform ?? config.new_platform,
+        replacement: fissionForm.replacement ?? config.replacement,
+      },
+    })
+    ElMessage.success(`预设「${preset.name}」已更新`)
+    await fetchPresets()
+  } catch (e) {
+    ElMessage.error('更新预设失败')
   }
 }
 

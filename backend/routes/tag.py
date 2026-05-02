@@ -27,12 +27,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 from typing import Optional
 from ..database import get_db
 from ..models.tag import Tag, MaterialTag
 from ..models.material import Material
 from ..models.option import Option
+from ..services.operation_log import log_operation
 
 # 创建标签管理专用路由器
 router = APIRouter()
@@ -201,6 +203,7 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
     db.add(tag)
     db.commit()
     db.refresh(tag)
+    log_operation(db, "tag", tag.id, "create", {"name": tag.name, "type": tag.type})
     return tag
 
 
@@ -235,6 +238,7 @@ def create_tag_from_option(data: TagFromOption, db: Session = Depends(get_db)):
     db.add(tag)
     db.commit()
     db.refresh(tag)
+    log_operation(db, "tag", tag.id, "create", {"name": tag.name, "type": tag.type, "from_option": True})
     return tag
 
 
@@ -277,22 +281,20 @@ def update_tag(tag_id: int, data: TagUpdate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(item)
+    log_operation(db, "tag", tag_id, "update", {"name": item.name, "type": item.type})
     return item
 
 
-@router.delete("/{tag_id}", status_code=204)
-def delete_tag(tag_id: int, db: Session = Depends(get_db)):
+@router.get("/{tag_id}/usage")
+def get_tag_usage(tag_id: int, db: Session = Depends(get_db)):
     """
-    删除指定标签。
-
-    同时会级联删除该标签与所有素材的关联记录（material_tag 表中对应行）。
-    不会影响 option 表中的记录。
+    查询标签被多少素材使用。
 
     请求参数：
-        tag_id (int): 要删除的标签 ID。
+        tag_id (int): 标签 ID。
 
-    返回值：
-        无返回体，HTTP 状态码 204 表示删除成功。
+    返回值:
+        {"tag_id": 1, "usage_count": 5}
 
     异常：
         HTTP 404: 当标签不存在时抛出。
@@ -300,11 +302,55 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     item = db.query(Tag).filter(Tag.id == tag_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="标签不存在")
+    count = db.query(func.count(MaterialTag.material_id)).filter(
+        MaterialTag.tag_id == tag_id
+    ).scalar()
+    return {"tag_id": tag_id, "usage_count": count}
+
+
+@router.delete("/{tag_id}", status_code=204)
+def delete_tag(
+    tag_id: int,
+    force: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    删除指定标签。
+
+    安全保护：如果标签仍被素材使用且未传 force=true，返回 409 并告知影响范围，
+    前端应提示用户二次确认后再强制删除。
+
+    请求参数：
+        tag_id (int): 要删除的标签 ID。
+        force (bool): 是否强制删除（跳过使用检查），默认 false。
+
+    返回值：
+        无返回体，HTTP 状态码 204 表示删除成功。
+
+    异常：
+        HTTP 404: 当标签不存在时抛出。
+        HTTP 409: 当标签仍被素材使用且未强制删除时抛出。
+    """
+    item = db.query(Tag).filter(Tag.id == tag_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="标签不存在")
+
+    # 检查是否被素材使用
+    usage_count = db.query(func.count(MaterialTag.material_id)).filter(
+        MaterialTag.tag_id == tag_id
+    ).scalar()
+
+    if usage_count > 0 and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"标签「{item.name}」仍被 {usage_count} 个素材使用，强制删除请传 force=true"
+        )
 
     # 级联删除关联表中的记录
     db.query(MaterialTag).filter(MaterialTag.tag_id == tag_id).delete()
     db.delete(item)
     db.commit()
+    log_operation(db, "tag", tag_id, "delete", {"name": item.name, "type": item.type, "usage_count": usage_count})
 
 
 # ============================================================
@@ -377,6 +423,7 @@ def add_material_tag(material_id: int, data: MaterialTagCreate, db: Session = De
     mt = MaterialTag(material_id=material_id, tag_id=data.tag_id)
     db.add(mt)
     db.commit()
+    log_operation(db, "tag", tag.id, "create", {"action": "add_to_material", "material_id": material_id, "tag_name": tag.name})
     return tag
 
 
@@ -415,3 +462,4 @@ def remove_material_tag(material_id: int, tag_id: int, db: Session = Depends(get
 
     db.delete(mt)
     db.commit()
+    log_operation(db, "tag", tag_id, "update", {"action": "remove_from_material", "material_id": material_id})

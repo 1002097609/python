@@ -8,6 +8,7 @@ import FissionRecords from '../views/FissionRecords.vue'
 import TagManage from '../views/TagManage.vue'
 import Dashboard from '../views/Dashboard.vue'
 import OperationLog from '../views/OperationLog.vue'
+import PresetManage from '../views/PresetManage.vue'
 
 const routes = [
   { path: '/', name: 'Dismantle', component: Dismantle, meta: { title: '素材拆解' } },
@@ -19,6 +20,7 @@ const routes = [
   { path: '/option-manage', name: 'OptionManage', component: OptionManage, meta: { title: '选项管理' } },
   { path: '/tag-manage', name: 'TagManage', component: TagManage, meta: { title: '标签管理' } },
   { path: '/operation-log', name: 'OperationLog', component: OperationLog, meta: { title: '操作日志' } },
+  { path: '/preset-manage', name: 'PresetManage', component: PresetManage, meta: { title: '预设管理' } },
 ]
 
 const router = createRouter({

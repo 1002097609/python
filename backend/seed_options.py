@@ -240,6 +240,9 @@ def seed():
 
         db.commit()
         print(f"[OK] 已初始化选项数据：插入 {inserted} 条，更新 {updated} 条，共 {len(DEFAULT_OPTIONS)} 条")
+
+        # 同时种子裂变预设数据
+        seed_presets(db)
     except Exception as e:
         db.rollback()
         print(f"[ERROR] {e}")
@@ -707,10 +710,16 @@ FISSION_PRESETS = [
 ]
 
 
-def seed_presets():
-    """初始化裂变预设数据（Upsert 模式）。"""
+def seed_presets(db=None):
+    """初始化裂变预设数据（Upsert 模式）。
+
+    Args:
+        db: 外部传入的数据库会话。若为 None，则自行创建（独立调用时使用）。
+    """
     from backend.models.fission_preset import FissionPreset
-    db = SessionLocal()
+    own_session = db is None
+    if own_session:
+        db = SessionLocal()
     try:
         inserted = 0
         updated = 0
@@ -729,7 +738,8 @@ def seed_presets():
         db.rollback()
         print(f"[ERROR] {e}")
     finally:
-        db.close()
+        if own_session:
+            db.close()
 
 
 if __name__ == "__main__":

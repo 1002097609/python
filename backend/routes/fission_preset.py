@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from typing import Optional
 from ..database import get_db
 from ..models.fission_preset import FissionPreset
+from ..services.operation_log import log_operation
 
 router = APIRouter()
 
@@ -65,6 +66,7 @@ def create_preset(data: PresetCreate, db: Session = Depends(get_db)):
     db.add(item)
     db.commit()
     db.refresh(item)
+    log_operation(db, "fission_preset", item.id, "create", {"name": item.name})
     return item
 
 
@@ -74,11 +76,14 @@ def update_preset(preset_id: int, data: PresetUpdate, db: Session = Depends(get_
     item = db.query(FissionPreset).filter(FissionPreset.id == preset_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="预设不存在")
+    changed = []
     for key, value in data.model_dump(exclude_unset=True).items():
         if value is not None:
             setattr(item, key, value)
+            changed.append(key)
     db.commit()
     db.refresh(item)
+    log_operation(db, "fission_preset", preset_id, "update", {"changed_fields": changed})
     return item
 
 
@@ -88,6 +93,8 @@ def delete_preset(preset_id: int, db: Session = Depends(get_db)):
     item = db.query(FissionPreset).filter(FissionPreset.id == preset_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="预设不存在")
+    name = item.name
     db.delete(item)
     db.commit()
+    log_operation(db, "fission_preset", preset_id, "delete", {"name": name})
     return {"message": "删除成功"}

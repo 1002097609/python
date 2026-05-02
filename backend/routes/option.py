@@ -23,6 +23,7 @@ from typing import Optional
 from ..database import get_db
 from ..models.option import Option
 from ..schemas.option import OptionCreate, OptionUpdate, OptionResponse
+from ..services.operation_log import log_operation
 
 # 创建新版选项数据专用路由器
 router = APIRouter()
@@ -111,6 +112,7 @@ def create_option(data: OptionCreate, db: Session = Depends(get_db)):
     db.add(item)
     db.commit()
     db.refresh(item)
+    log_operation(db, "option", item.id, "create", {"group_key": item.group_key, "label": item.label})
     return item
 
 
@@ -136,21 +138,31 @@ def update_option(option_id: int, data: OptionUpdate, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="选项不存在")
 
     # exclude_unset=True 确保只有调用方实际传入的字段才会被更新
+    changed = list(data.model_dump(exclude_unset=True).keys())
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(item, key, value)
 
     db.commit()
     db.refresh(item)
+    log_operation(db, "option", option_id, "update", {"changed_fields": changed})
     return item
 
 
 @router.delete("/{option_id}", status_code=204)
-def delete_option(option_id: int, db: Session = Depends(get_db)):
+def delete_option(
+    option_id: int,
+    hard: bool = Query(False, description="是否物理删除（默认软删除）"),
+    db: Session = Depends(get_db)
+):
     """
     删除指定的选项记录。
 
+    默认执行软删除（将 is_active 设为 0），保留数据完整性。
+    传 hard=true 时执行物理删除（级联影响 tag 表外键，慎用）。
+
     请求参数：
         option_id (int): 要删除的选项 ID。
+        hard (bool):     是否物理删除，默认 false。
 
     返回值：
         无返回体，HTTP 状态码 204 表示删除成功。
@@ -161,5 +173,15 @@ def delete_option(option_id: int, db: Session = Depends(get_db)):
     item = db.query(Option).filter(Option.id == option_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="选项不存在")
-    db.delete(item)
+
+    if hard:
+        db.delete(item)
+    else:
+        item.is_active = 0
+
+    log_operation(db, "option", item.id, "delete", {
+        "label": item.label,
+        "group_key": item.group_key,
+        "hard": hard,
+    })
     db.commit()
