@@ -24,6 +24,7 @@ from backend.models.skeleton import Skeleton
 from backend.models.fission import Fission
 from backend.models.effect_data import EffectData
 from backend.models.option import Option
+from backend.services.fission_engine import generate_output
 
 
 # ============================================================
@@ -442,6 +443,40 @@ def seed_all():
             mode = random.choice(["replace_leaf", "replace_branch", "replace_style"])
             new_topic = random.choice(["新手入门指南", "进阶技巧分享", "避坑大全", "好物推荐", "对比测评", "使用教程", "选购攻略"])
 
+            # 调用真实裂变引擎生成内容
+            import json as _json
+            structure = sk.structure_json
+            elements = sk.elements_json
+            if isinstance(structure, str):
+                structure = _json.loads(structure) or []
+            if isinstance(elements, str):
+                elements = _json.loads(elements) or {}
+            structure = structure if isinstance(structure, list) else []
+            elements = elements if isinstance(elements, dict) else {}
+
+            replacement = {
+                "L5": {
+                    "golden_sentences": random.sample(
+                        ["这个细节99%的人都忽略了", "用了3年才发现这个方法", "性价比天花板",
+                         "闭眼入不会错", "回购了5次的好物", "用了就回不去了"],
+                        k=random.randint(1, 3)
+                    ),
+                    "data_refs": random.sample(
+                        ["连续使用28天效果显著", "90%的用户反馈有效", "满意度评分4.8/5.0"],
+                        k=random.randint(0, 2)
+                    ),
+                }
+            }
+
+            output_content = generate_output(
+                fission_mode=mode,
+                structure=structure,
+                elements=elements,
+                strategy=sk.strategy_desc or "",
+                new_topic=new_topic,
+                replacement=replacement,
+            )
+
             db.add(Fission(
                 skeleton_id=sk.id,
                 source_material_id=sk.source_material_id,
@@ -449,8 +484,9 @@ def seed_all():
                 new_topic=new_topic,
                 new_category=random.choice(ALL_CATEGORIES),
                 new_platform=random.choice(["抖音", "小红书", "快手"]),
-                output_title=f"{new_topic}",
-                output_content=f"【开头 — 痛点共鸣】\n{new_topic}相关内容分享\n\n【主体 — 价值输出】\n{mode}模式生成的内容\n\n【结尾 — 引导行动】\n欢迎评论区交流！",
+                replacement_json=replacement,
+                output_title=new_topic,
+                output_content=output_content,
                 output_status=random.choice([0, 0, 1, 2, 3, 3]),
                 predicted_ctr=f"{random.uniform(1.0, 3.0):.1f}%-{random.uniform(3.0, 5.0):.1f}%",
                 predicted_roi=f"{random.uniform(1.5, 3.0):.1f}x-{random.uniform(3.0, 5.0):.1f}x",
