@@ -204,12 +204,22 @@ def generate_output(fission_mode, structure, elements, strategy, new_topic, repl
 
     content_lines = []
 
-    # 生成标题
+    # 生成标题（主标题 + 备用标题变体）
     title_formula = l4_data.get("title_formula") or elements.get("title_formula", "")
     if title_formula and new_topic:
         title = _fill_template(title_formula, new_topic, data_refs[0] if data_refs else "")
         content_lines.append(f"【标题】{title}")
         content_lines.append("")
+        # 备用标题变体
+        if len(data_refs) > 1:
+            alt_title = _fill_template(title_formula, new_topic, data_refs[1])
+            if alt_title != title:
+                content_lines.append(f"【备用标题】{alt_title}")
+                content_lines.append("")
+        # 如果没有数据引用，生成一个数字变体
+        if not data_refs:
+            content_lines.append(f"【备用标题】{_fill_template(title_formula, new_topic, '90%人不知道')}")
+            content_lines.append("")
 
     # 生成正文段落
     for idx, section in enumerate(sections):
@@ -256,6 +266,7 @@ def generate_output(fission_mode, structure, elements, strategy, new_topic, repl
 
         content_lines.extend(paragraph_blocks)
 
+        # 视觉描述整合到每个段落
         vd = vd_per_section[idx] if idx < len(vd_per_section) else ""
         if vd:
             content_lines.append(f"  📷 画面指导：{vd}")
@@ -279,5 +290,37 @@ def generate_output(fission_mode, structure, elements, strategy, new_topic, repl
         if remaining_vd:
             content_lines.append(f"  📷 额外画面：{' | '.join(remaining_vd)}")
         content_lines.append("")
+
+    # 适用场景
+    mode_desc_map = {
+        "replace_leaf": "本素材采用「换叶子」策略，保留了原骨架的 L2-L4 结构，替换了主题和表达层。适用于同品类不同产品、或同产品不同卖点的快速变体生成。",
+        "replace_branch": "本素材采用「换枝杈」策略，保留了原主题和策略层，替换了结构和元素层。适用于跨品类迁移、或同一主题的不同叙事角度。",
+        "replace_style": "本素材采用「换表达」策略，保留了原骨架结构，替换了策略风格和表达层。适用于同一内容的不同情绪基调、或不同人群定位的变体。",
+    }
+    content_lines.append("【适用场景说明】")
+    content_lines.append(f"  {mode_desc_map.get(fission_mode, '')}")
+    if new_topic:
+        content_lines.append(f"  核心主题：{new_topic}")
+    if golden_sentences:
+        content_lines.append(f"  核心金句：{golden_sentences[0]}")
+    content_lines.append("")
+
+    # 注意事项
+    content_lines.append("【创作注意事项】")
+    tips = [
+        "以上文案为骨架填充结果，请根据实际产品信息和投放平台调性进行人工润色。",
+        "标题建议 A/B 测试，可尝试备用标题变体。",
+        "金句和数据引用请核实准确性，避免夸大宣传。",
+        "画面指导仅供参考，实际拍摄/设计可根据素材风格调整。",
+    ]
+    if fission_mode == "replace_leaf":
+        tips.append("换叶子模式下，注意新主题与骨架策略的契合度，避免生硬拼接。")
+    elif fission_mode == "replace_branch":
+        tips.append("换枝杈模式下，新结构需要重新验证逻辑流畅性，建议完整通读。")
+    elif fission_mode == "replace_style":
+        tips.append("换表达模式下，确保新策略风格与目标受众匹配，注意语气一致性。")
+    for tip in tips:
+        content_lines.append(f"  ✦ {tip}")
+    content_lines.append("")
 
     return "\n".join(content_lines)

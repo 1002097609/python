@@ -52,7 +52,7 @@ class Skeleton(Base):
     skeleton_type = Column(String(50), comment="骨架类型")
 
     # 来源素材 ID，记录本骨架是从哪个素材的拆解中提炼出来的
-    source_material_id = Column(Integer, comment="来源素材 ID")
+    source_material_id = Column(Integer, ForeignKey("material.id", ondelete="SET NULL"), comment="来源素材 ID")
 
     # L2 策略层描述素材来源的营销策略
     strategy_desc = Column(String(500), comment="L2 策略描述")
@@ -85,9 +85,11 @@ class Skeleton(Base):
     # 创建时间，自动设置为当前时间
     created_at = Column(DateTime, server_default=func.now())
 
-    # 索引：按骨架类型、使用次数、ROI 建立索引，支持裂变时按效果排序选取骨架
+    # 索引：按骨架类型、使用次数、ROI、来源素材建立索引
     __table_args__ = (
-        Index("idx_skeleton_type", "skeleton_type"),  # 按类型筛选骨架
-        Index("idx_skeleton_usage", "usage_count"),    # 按使用次数排序（热门程度）
-        Index("idx_skeleton_roi", "avg_roi"),          # 按 ROI 排序（效果优先）
+        Index("idx_skeleton_type", "skeleton_type"),          # 按类型筛选骨架
+        Index("idx_skeleton_usage", "usage_count"),           # 按使用次数排序（热门程度）
+        Index("idx_skeleton_roi", "avg_roi"),                 # 按 ROI 排序（效果优先）
+        Index("idx_skeleton_source_material", "source_material_id"),  # 按来源素材查找骨架
+        Index("idx_skeleton_platform", "platform"),           # 按平台筛选
     )

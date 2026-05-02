@@ -639,8 +639,13 @@ const enterEditMode = () => {
   editMode.value = true
 }
 
-const cancelEdit = () => {
-  editMode.value = false
+const cancelEdit = async () => {
+  try {
+    await ElMessageBox.confirm('取消编辑将丢失未保存的修改，确定继续吗？', '确认取消', { type: 'warning' })
+    editMode.value = false
+  } catch {
+    // 用户点击取消，不做任何操作
+  }
 }
 
 const buildDismantlePayload = () => ({

@@ -101,6 +101,26 @@ def get_dismantle_by_material(material_id: int, db: Session = Depends(get_db)):
     return dismantle
 
 
+@router.get("/by-material/{material_id}/history")
+def get_dismantle_history(material_id: int, db: Session = Depends(get_db)):
+    """
+    查询指定素材的所有拆解历史版本。
+
+    返回该素材关联的所有拆解记录（含已归档的历史版本），
+    按创建时间倒序排列，最近的版本在前。
+
+    请求参数：
+        material_id (int): 素材的唯一标识 ID。
+
+    返回值:
+        list[DismantleResponse]: 历史拆解记录列表。
+    """
+    items = db.query(Dismantle).filter(
+        Dismantle.material_id == material_id
+    ).order_by(Dismantle.created_at.desc()).all()
+    return items
+
+
 @router.put("/{dismantle_id}", response_model=DismantleResponse)
 def update_dismantle(dismantle_id: int, data: DismantleUpdate, db: Session = Depends(get_db)):
     """

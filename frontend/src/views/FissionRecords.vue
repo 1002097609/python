@@ -17,22 +17,22 @@
       <div class="stat-card stat-pending">
         <div class="stat-icon">📝</div>
         <div class="stat-info">
-          <div class="stat-num">{{ draftCount }}<span v-if="hasMorePages" class="stat-page-hint">/页</span></div>
-          <div class="stat-label">{{ statusLabel(0) }}<span v-if="hasMorePages" class="stat-page-hint">（当前页）</span></div>
+          <div class="stat-num">{{ globalStats.draft }}</div>
+          <div class="stat-label">{{ statusLabel(0) }}</div>
         </div>
       </div>
       <div class="stat-card stat-running">
         <div class="stat-icon">🚀</div>
         <div class="stat-info">
-          <div class="stat-num">{{ runningCount }}<span v-if="hasMorePages" class="stat-page-hint">/页</span></div>
-          <div class="stat-label">{{ statusLabel(3) }}<span v-if="hasMorePages" class="stat-page-hint">（当前页）</span></div>
+          <div class="stat-num">{{ globalStats.deployed }}</div>
+          <div class="stat-label">{{ statusLabel(3) }}</div>
         </div>
       </div>
       <div class="stat-card stat-done">
         <div class="stat-icon">✅</div>
         <div class="stat-info">
-          <div class="stat-num">{{ hasEffectCount }}<span v-if="hasMorePages" class="stat-page-hint">/页</span></div>
-          <div class="stat-label">已回写效果<span v-if="hasMorePages" class="stat-page-hint">（当前页）</span></div>
+          <div class="stat-num">{{ globalStats.has_effect }}</div>
+          <div class="stat-label">已回写效果</div>
         </div>
       </div>
     </div>
@@ -51,11 +51,28 @@
           <el-select v-model="filterSkeleton" placeholder="骨架" clearable style="width:180px">
             <el-option v-for="sk in skeletonOptions" :key="sk.id" :label="sk.name" :value="sk.id" />
           </el-select>
+          <el-select v-model="filterPlatform" placeholder="平台" clearable style="width:120px">
+            <el-option v-for="opt in platforms" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+          <el-date-picker v-model="filterDateRange" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" size="default" style="width:220px" value-format="YYYY-MM-DD" clearable />
+        </div>
+      </div>
+
+      <!-- 批量操作栏 -->
+      <div class="batch-bar" v-if="batchSelection.length">
+        <span class="batch-hint">已选择 {{ batchSelection.length }} 个裂变记录</span>
+        <div class="batch-actions">
+          <el-select v-model="batchTargetStatus" placeholder="批量流转到..." size="small" style="width:150px">
+            <el-option v-for="opt in nextStatusOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+          <el-button type="warning" size="small" @click="batchAdvanceStatus" :loading="batchLoading">批量流转</el-button>
+          <el-button type="danger" size="small" @click="batchDelete" :loading="batchLoading">批量删除</el-button>
         </div>
       </div>
 
       <!-- 记录表格 -->
-      <el-table :data="records" stripe style="width:100%">
+      <el-table :data="records" stripe style="width:100%" v-loading="loading" @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="42" :selectable="row => row.output_status < 3" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column label="骨架" min-width="160">
           <template #default="{ row }">
@@ -180,24 +197,33 @@
 
         <!-- 效果数据趋势 -->
         <div class="detail-section" v-if="currentRecord.effects && currentRecord.effects.length > 0">
-          <div class="section-title">📈 效果数据趋势</div>
+          <div class="section-title">
+            📈 效果数据趋势
+            <span class="effect-count">{{ currentRecord.effects.length }} 条记录</span>
+          </div>
           <!-- 趋势折线图 -->
           <div ref="effectChartRef" class="effect-chart"></div>
           <!-- 数据表格 -->
           <el-table :data="currentRecord.effects" size="small" stripe style="margin-top:12px">
-            <el-table-column prop="stat_date" label="日期" width="120" />
-            <el-table-column prop="platform" label="平台" width="90" />
-            <el-table-column prop="impressions" label="曝光" width="90" />
-            <el-table-column prop="clicks" label="点击" width="80" />
-            <el-table-column label="CTR" width="80">
+            <el-table-column prop="stat_date" label="日期" width="110" />
+            <el-table-column prop="platform" label="平台" width="80" />
+            <el-table-column prop="impressions" label="曝光" width="80" />
+            <el-table-column prop="clicks" label="点击" width="70" />
+            <el-table-column label="CTR" width="70">
               <template #default="{ row }">{{ row.ctr ? row.ctr + '%' : '—' }}</template>
             </el-table-column>
-            <el-table-column prop="conversions" label="转化" width="80" />
-            <el-table-column label="ROI" width="80">
+            <el-table-column prop="conversions" label="转化" width="70" />
+            <el-table-column label="ROI" width="70">
               <template #default="{ row }">{{ row.roi ? row.roi + 'x' : '—' }}</template>
             </el-table-column>
-            <el-table-column label="花费" width="90">
+            <el-table-column label="花费" width="80">
               <template #default="{ row }">{{ row.cost ? '¥' + row.cost : '—' }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="120" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="editEffect(row)">编辑</el-button>
+                <el-button type="danger" link size="small" @click="deleteEffect(row)">删除</el-button>
+              </template>
             </el-table-column>
           </el-table>
         </div>
@@ -215,9 +241,10 @@
       </template>
     </el-dialog>
 
-    <!-- 录入效果数据弹窗 -->
-    <el-dialog v-model="effectDialogVisible" title="录入效果数据" width="560px" destroy-on-close>
+    <!-- 录入/编辑效果数据弹窗 -->
+    <el-dialog v-model="effectDialogVisible" :title="editingEffectId ? '编辑效果数据' : '录入效果数据'" width="560px" destroy-on-close @close="editingEffectId = null">
       <el-form ref="effectFormRef" :model="effectForm" :rules="effectRules" label-width="90px">
+        <div class="form-calc-hint">💡 填写曝光/点击/转化/花费/收入后，CTR / CVR / ROI / CPA 将自动计算</div>
         <el-form-item label="投放平台" prop="platform">
           <el-select v-model="effectForm.platform" placeholder="选择平台" style="width:100%">
             <el-option v-for="opt in platforms" :key="opt.value" :label="opt.label" :value="opt.value" />
@@ -299,9 +326,12 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
-import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, getOptions, updateFissionStatus } from '../api'
+import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, getOptions, getOptionsByGroup, updateFissionStatus } from '../api'
+
+const router = useRouter()
 
 // ============================================================
 // 数据状态
@@ -311,6 +341,8 @@ const loading = ref(false)
 const skeletons = ref([])
 const filterStatus = ref(null)
 const filterSkeleton = ref(null)
+const filterPlatform = ref(null)
+const filterDateRange = ref(null)
 const page = ref(1)
 const pageSize = ref(20)
 const totalCount = ref(0)
@@ -324,6 +356,11 @@ const submitting = ref(false)
 const savingMaterial = ref(false)
 const effectFormRef = ref(null)
 
+// 批量操作
+const batchSelection = ref([])
+const batchTargetStatus = ref(null)
+const batchLoading = ref(false)
+
 // 动态选项（从数据库加载）
 const options = ref({
   fission_status: [],
@@ -336,6 +373,15 @@ const fetchOptions = async () => {
     options.value = data
   } catch (e) {
     console.error('加载选项失败', e)
+  }
+}
+
+const loadPlatformOptions = async () => {
+  try {
+    const data = await getOptionsByGroup('platform')
+    platformOptions.value = data.map(o => ({ label: o.label, value: o.value || o.label }))
+  } catch (e) {
+    console.error('加载平台选项失败', e)
   }
 }
 
@@ -360,12 +406,9 @@ const effectRules = {
   stat_date: [{ required: true, message: '请选择统计日期', trigger: 'change' }],
 }
 
-// 平台选项（从数据库动态加载）
-const platforms = computed(() => {
-  // 从已有记录中提取平台列表
-  const set = new Set(records.value.map(r => r.platform).filter(Boolean))
-  return [...set].map(p => ({ label: p, value: p }))
-})
+// 平台选项（从 option 表动态加载，避免只从当前页记录提取导致选项不全）
+const platformOptions = ref([])
+const platforms = computed(() => platformOptions.value)
 
 // ============================================================
 // 骨架选项（从骨架库获取）
@@ -383,9 +426,17 @@ const skeletonOptions = computed(() => {
 // ============================================================
 // 统计数据（基于当前页数据；总数需翻页查看或等待后端聚合接口）
 // ============================================================
-const draftCount = computed(() => records.value.filter(r => r.output_status === 0).length)
-const runningCount = computed(() => records.value.filter(r => r.output_status === 3).length)
-const hasEffectCount = computed(() => records.value.filter(r => r.actual_roi).length)
+// 全局统计数据（从后端聚合接口获取，不受分页影响）
+const globalStats = ref({ total: 0, draft: 0, pending: 0, approved: 0, deployed: 0, has_effect: 0 })
+
+const fetchGlobalStats = async () => {
+  try {
+    const { data } = await api.get('/fission/stats')
+    globalStats.value = data
+  } catch (e) {
+    console.error('加载全局统计失败', e)
+  }
+}
 
 // 标记是否有更多数据（用于提示用户当前统计仅为当前页）
 const hasMorePages = computed(() => totalCount.value > pageSize.value)
@@ -405,6 +456,21 @@ const nextStatusLabel = (currentStatus) => {
   const labels = { 0: '提交审核', 1: '审核通过', 2: '标记已投放' }
   return labels[currentStatus] || ''
 }
+
+// 批量流转的下一个状态选项（当前状态 → 下一状态）
+const nextStatusOptions = computed(() => {
+  // 状态流转：0→1(待审核), 1→2(已采用), 2→3(已投放)
+  // 根据选中记录的最小状态决定可选的下一状态
+  if (!batchSelection.value.length) return []
+  const statuses = batchSelection.value.map(r => r.output_status)
+  const uniqueStatuses = [...new Set(statuses)]
+  // 只允许同状态的记录一起流转
+  if (uniqueStatuses.length !== 1) return []
+  const cur = uniqueStatuses[0]
+  if (cur >= 3) return []
+  const labels = { 1: '待审核', 2: '已采用', 3: '已投放' }
+  return [{ value: cur + 1, label: labels[cur + 1] }]
+})
 const modeLabel = (m) => {
   const opt = (options.value.fission_mode || []).find(o => o.value === m)
   if (!opt) return m
@@ -429,6 +495,11 @@ const fetchRecords = async () => {
     const params = { page: page.value, page_size: pageSize.value }
     if (filterStatus.value !== null && filterStatus.value !== '') params.output_status = filterStatus.value
     if (filterSkeleton.value !== null && filterSkeleton.value !== '') params.skeleton_id = filterSkeleton.value
+    if (filterPlatform.value) params.platform = filterPlatform.value
+    if (filterDateRange.value && filterDateRange.value.length === 2) {
+      params.start_date = filterDateRange.value[0]
+      params.end_date = filterDateRange.value[1]
+    }
     const data = await getFissions(params)
     if (Array.isArray(data)) {
       records.value = data
@@ -437,6 +508,8 @@ const fetchRecords = async () => {
       records.value = data.items || []
       totalCount.value = data.total || 0
     }
+    // 每次加载列表时同步刷新全局统计
+    await fetchGlobalStats()
   } catch (e) {
     ElMessage.error('加载裂变记录失败')
   }
@@ -444,7 +517,7 @@ const fetchRecords = async () => {
 }
 
 // 筛选变化时重置页码
-watch([filterStatus, filterSkeleton], () => {
+watch([filterStatus, filterSkeleton, filterPlatform, filterDateRange], () => {
   page.value = 1
 })
 
@@ -589,23 +662,87 @@ const saveAsMaterial = async () => {
   savingMaterial.value = false
 }
 
+// 编辑模式
+const editingEffectId = ref(null)
+
 const submitEffect = async () => {
   const valid = await effectFormRef.value.validate().catch(() => false)
   if (!valid) return
   submitting.value = true
   try {
-    // 提交效果数据，关联到裂变记录
-    await createEffect({
-      fission_id: effectFissionId.value,
-      ...effectForm.value,
-    })
-    ElMessage.success('效果数据录入成功！骨架评分已自动更新')
+    if (editingEffectId.value) {
+      // 编辑模式
+      await api.put(`/effect/${editingEffectId.value}`, {
+        ...effectForm.value,
+        fission_id: effectFissionId.value,
+      })
+      ElMessage.success('效果数据已更新，骨架评分已自动刷新')
+    } else {
+      // 新增模式
+      await createEffect({
+        fission_id: effectFissionId.value,
+        ...effectForm.value,
+      })
+      ElMessage.success('效果数据录入成功！骨架评分已自动更新')
+    }
     effectDialogVisible.value = false
-    await fetchRecords()  // 刷新列表，更新实际效果列
+    editingEffectId.value = null
+    await fetchRecords()
+    // 如果详情弹窗打开着，刷新详情
+    if (detailVisible.value && currentRecord.value) {
+      const data = await getFissionDetail(currentRecord.value.id)
+      currentRecord.value = data
+      await nextTick()
+      initEffectChart()
+    }
   } catch (e) {
-    ElMessage.error('录入失败: ' + (e.response?.data?.detail || e.message))
+    ElMessage.error('操作失败: ' + (e.response?.data?.detail || e.message))
   }
   submitting.value = false
+}
+
+// 编辑效果数据
+const editEffect = (row) => {
+  editingEffectId.value = row.id
+  effectFissionId.value = row.fission_id || currentRecord.value?.id
+  effectForm.value = {
+    platform: row.platform || '',
+    impressions: row.impressions || null,
+    clicks: row.clicks || null,
+    ctr: row.ctr || null,
+    conversions: row.conversions || null,
+    cvr: row.cvr || null,
+    cost: row.cost || null,
+    revenue: row.revenue || null,
+    roi: row.roi || null,
+    cpa: row.cpa || null,
+    stat_date: row.stat_date || new Date().toISOString().split('T')[0],
+  }
+  effectDialogVisible.value = true
+}
+
+// 删除效果数据
+const deleteEffect = (row) => {
+  ElMessageBox.confirm(
+    `确认删除 ${row.stat_date} 的效果数据？删除后骨架评分将自动重新计算。`,
+    '删除效果数据',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  ).then(async () => {
+    try {
+      await api.delete(`/effect/${row.id}`)
+      ElMessage.success('效果数据已删除')
+      await fetchRecords()
+      // 刷新详情
+      if (detailVisible.value && currentRecord.value) {
+        const data = await getFissionDetail(currentRecord.value.id)
+        currentRecord.value = data
+        await nextTick()
+        initEffectChart()
+      }
+    } catch (e) {
+      ElMessage.error('删除失败')
+    }
+  }).catch(() => {})
 }
 
 // ============================================================
@@ -649,12 +786,72 @@ const advanceStatus = (row) => {
 }
 
 // ============================================================
+// 批量操作
+// ============================================================
+const onSelectionChange = (sel) => {
+  batchSelection.value = sel
+  batchTargetStatus.value = null
+}
+
+const batchAdvanceStatus = async () => {
+  if (!batchTargetStatus.value && batchTargetStatus.value !== 0) {
+    ElMessage.warning('请选择目标状态')
+    return
+  }
+  if (!batchSelection.value.length) return
+  const targetLabel = { 1: '待审核', 2: '已采用', 3: '已投放' }[batchTargetStatus.value] || ''
+  ElMessageBox.confirm(
+    `确认将选中的 ${batchSelection.value.length} 个记录批量流转到「${targetLabel}」？\n（仅允许同状态记录一起流转）`,
+    '批量状态流转',
+    { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' },
+  ).then(async () => {
+    batchLoading.value = true
+    let success = 0
+    for (const row of batchSelection.value) {
+      try {
+        await updateFissionStatus(row.id, batchTargetStatus.value)
+        row.output_status = batchTargetStatus.value
+        success++
+      } catch (e) { /* skip */ }
+    }
+    batchLoading.value = false
+    ElMessage.success(`${success} 个记录已流转到「${targetLabel}」`)
+    batchSelection.value = []
+    batchTargetStatus.value = null
+    await fetchRecords()
+  }).catch(() => {})
+}
+
+const batchDelete = async () => {
+  if (!batchSelection.value.length) return
+  ElMessageBox.confirm(
+    `确认删除选中的 ${batchSelection.value.length} 个裂变记录？删除后不可恢复。`,
+    '批量删除',
+    { confirmButtonText: '删除', cancelButtonText: '取消', type: 'danger' },
+  ).then(async () => {
+    batchLoading.value = true
+    let success = 0
+    for (const row of batchSelection.value) {
+      try {
+        await api.delete(`/fission/${row.id}`)
+        success++
+      } catch (e) { /* skip */ }
+    }
+    batchLoading.value = false
+    ElMessage.success(`已删除 ${success} 个记录`)
+    batchSelection.value = []
+    await fetchRecords()
+  }).catch(() => {})
+}
+
+// ============================================================
 // 页面初始化
 // ============================================================
 onMounted(() => {
   fetchRecords()
   fetchSkeletons()
   fetchOptions()
+  loadPlatformOptions()
 })
 </script>
 
@@ -717,6 +914,8 @@ onMounted(() => {
 
 /* 效果趋势图 */
 .effect-chart { width: 100%; height: 240px; }
+.effect-count { font-size: 12px; color: #999; font-weight: 400; margin-left: 8px; }
+.form-calc-hint { font-size: 12px; color: #888; margin-bottom: 12px; padding: 6px 10px; background: #f0f9f4; border-radius: 6px; border-left: 3px solid #43e97b; }
 
 /* 产出内容 */
 .output-content {
@@ -727,6 +926,15 @@ onMounted(() => {
 
 /* 表单提示 */
 .form-hint { font-size: 12px; color: #bbb; margin-left: 4px; }
+
+/* 批量操作栏 */
+.batch-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; padding: 10px 16px;
+  background: #f0f4ff; border-radius: 8px; border: 1px solid #d0d8f0;
+}
+.batch-hint { font-size: 13px; color: #667eea; font-weight: 500; }
+.batch-actions { display: flex; align-items: center; gap: 8px; }
 
 /* 分页 */
 .pagination-wrap { display: flex; justify-content: flex-end; margin-top: 20px; }

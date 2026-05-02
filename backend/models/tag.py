@@ -15,7 +15,7 @@ MaterialTag 主要字段：
   tag_id: 标签 ID（复合主键之一，外键 -> tag.id）
 """
 
-from sqlalchemy import Column, Integer, String, UniqueConstraint, ForeignKey
+from sqlalchemy import Column, Integer, String, UniqueConstraint, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
@@ -60,9 +60,10 @@ class Tag(Base):
     # 与 option 表的关联关系，通过 option_id 外键访问关联的 option 对象
     option = relationship("Option", backref="tags")
 
-    # 联合唯一约束：同一 type 下的 name 不能重复
+    # 联合唯一约束 + 索引
     __table_args__ = (
         UniqueConstraint("name", "type", name="uk_name_type"),
+        Index("idx_tag_type", "type"),  # 按类型筛选标签
     )
 
 

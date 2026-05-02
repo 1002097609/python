@@ -32,6 +32,9 @@
               <el-dropdown-item>
                 <router-link to="/preset-manage" class="dropdown-link">📋 预设管理</router-link>
               </el-dropdown-item>
+              <el-dropdown-item>
+                <router-link to="/operation-log" class="dropdown-link">📜 操作日志</router-link>
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -59,7 +62,7 @@ const tabs = [
   { path: '/skeleton-lib', label: '骨架库', icon: '🦴' },
 ]
 
-const moreDropdownPaths = ['/tag-manage', '/fission-records', '/option-manage', '/preset-manage']
+const moreDropdownPaths = ['/tag-manage', '/fission-records', '/option-manage', '/preset-manage', '/operation-log']
 const isMoreActive = computed(() => moreDropdownPaths.includes(route.path))
 </script>
 

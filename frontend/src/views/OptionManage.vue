@@ -12,6 +12,8 @@
           <el-select v-model="filterGroup" placeholder="按分组筛选" clearable style="width:200px">
             <el-option v-for="g in groups" :key="g" :label="g" :value="g" />
           </el-select>
+          <el-input v-model="searchKeyword" placeholder="搜索名称/值..." clearable style="width:180px" prefix-icon="Search" />
+          <el-checkbox v-model="showInactive" style="margin-left:12px">显示已禁用</el-checkbox>
           <span class="count-badge">共 {{ filteredOptions.length }} 项</span>
         </div>
         <el-button type="primary" @click="openAddDialog">+ 新增选项</el-button>
@@ -96,6 +98,8 @@ import api, { getOptions, getOptionsByGroup, createOption, updateOption, deleteO
 const allOptions = ref([])
 const groups = ref([])
 const filterGroup = ref('')
+const showInactive = ref(false)
+const searchKeyword = ref('')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editingId = ref(null)
@@ -116,14 +120,29 @@ const rules = {
 }
 
 const filteredOptions = computed(() => {
-  if (!filterGroup.value) return allOptions.value
-  return allOptions.value.filter(o => o.group_key === filterGroup.value)
+  let result = allOptions.value
+  // 默认只显示启用的，勾选后显示全部
+  if (!showInactive.value) {
+    result = result.filter(o => o.is_active !== 0)
+  }
+  if (filterGroup.value) {
+    result = result.filter(o => o.group_key === filterGroup.value)
+  }
+  if (searchKeyword.value) {
+    const kw = searchKeyword.value.toLowerCase()
+    result = result.filter(o =>
+      (o.label || "").toLowerCase().includes(kw) ||
+      (o.value || "").toLowerCase().includes(kw)
+    )
+  }
+  return result
 })
 
 const fetchOptions = async () => {
   try {
-    const data = await getOptionsByGroup()
-    allOptions.value = data
+    // 加载全部选项（包括禁用的，由前端 filteredOptions 控制显示）
+    const { data } = await api.get('/option/', { params: {} })
+    allOptions.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) {
     ElMessage.error('加载选项失败')
   }
@@ -201,17 +220,17 @@ const handleCreateTag = async (row) => {
 }
 
 const handleDelete = (row) => {
-  ElMessageBox.confirm(`确认删除「${row.label}」？`, '警告', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-  }).then(async () => {
+  ElMessageBox.confirm(
+    `确认软删除「${row.label}」？\n软删除后该选项将不在下拉框中显示，但数据保留可恢复。`,
+    '软删除确认',
+    { type: 'warning', confirmButtonText: '软删除', cancelButtonText: '取消' }
+  ).then(async () => {
     try {
-      await deleteOption(row.id)
-      ElMessage.success('删除成功')
-      await fetchOptions()
+      await deleteOption(row.id)  // 默认软删除（is_active=0）
+      row.is_active = 0
+      ElMessage.success('选项已软删除（可在"显示已禁用"中查看和恢复）')
     } catch (e) {
-      ElMessage.error('删除失败')
+      ElMessage.error('删除失败: ' + (e.response?.data?.detail || e.message))
     }
   }).catch(() => {})
 }

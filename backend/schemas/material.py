@@ -59,6 +59,18 @@ class MaterialUpdate(BaseModel):
     status: Optional[int] = None         # 素材状态（0=未拆解，1=已拆解）
 
 
+class BatchStatusUpdate(BaseModel):
+    """
+    批量更新素材状态的请求参数模型。
+
+    字段说明：
+        ids (list[int]):   要更新的素材 ID 列表，至少包含一个。
+        status (int):      目标状态值（0=未拆解，1=已拆解，2=已归档）。
+    """
+    ids: list[int]
+    status: int
+
+
 class MaterialResponse(BaseModel):
     """
     素材响应数据模型，用于 API 返回的素材数据结构。

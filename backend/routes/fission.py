@@ -218,16 +218,22 @@ def _predict_performance(skeleton, fission_mode, db=None) -> dict:
 def list_fissions(
     skeleton_id: Optional[int] = None,
     output_status: Optional[int] = None,
+    platform: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
 ):
     """
-    查询裂变记录列表，支持按骨架 ID 和产出状态筛选。
+    查询裂变记录列表，支持按骨架 ID、产出状态、平台、日期范围筛选。
 
     请求参数：
         skeleton_id (int):   按骨架 ID 筛选（可选）
         output_status (int): 按产出状态筛选（可选，0=草稿 1=待审核 2=已采用 3=已投放）
+        platform (str):      按新平台筛选（可选）
+        start_date (str):    起始日期（可选，格式 YYYY-MM-DD）
+        end_date (str):      结束日期（可选，格式 YYYY-MM-DD）
         page (int):          页码，默认 1
         page_size (int):     每页条数，默认 20
 
@@ -242,6 +248,14 @@ def list_fissions(
     # 按产出状态筛选
     if output_status is not None:
         query = query.filter(Fission.output_status == output_status)
+    # 按平台筛选
+    if platform:
+        query = query.filter(Fission.new_platform == platform)
+    # 按日期范围筛选
+    if start_date:
+        query = query.filter(Fission.created_at >= start_date)
+    if end_date:
+        query = query.filter(Fission.created_at <= end_date + " 23:59:59")
 
     # 先查总数，再分页取数据
     total = query.count()
@@ -267,6 +281,35 @@ def list_fissions(
             "created_at": item.created_at,
         })
     return {"items": result, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/stats")
+def fission_stats(db: Session = Depends(get_db)):
+    """
+    裂变记录全局统计，返回各状态计数（不受分页影响）。
+
+    返回值:
+        dict: {total, draft, pending, approved, deployed, has_effect}
+    """
+    from sqlalchemy import func, case
+
+    stats = db.query(
+        func.count(Fission.id).label("total"),
+        func.sum(case((Fission.output_status == 0, 1), else_=0)).label("draft"),
+        func.sum(case((Fission.output_status == 1, 1), else_=0)).label("pending"),
+        func.sum(case((Fission.output_status == 2, 1), else_=0)).label("approved"),
+        func.sum(case((Fission.output_status == 3, 1), else_=0)).label("deployed"),
+        func.sum(case((Fission.actual_roi.isnot(None), 1), else_=0)).label("has_effect"),
+    ).first()
+
+    return {
+        "total": stats.total or 0,
+        "draft": int(stats.draft or 0),
+        "pending": int(stats.pending or 0),
+        "approved": int(stats.approved or 0),
+        "deployed": int(stats.deployed or 0),
+        "has_effect": int(stats.has_effect or 0),
+    }
 
 
 @router.put("/{fission_id}/status")

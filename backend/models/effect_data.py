@@ -46,10 +46,10 @@ class EffectData(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # 关联的原始素材 ID（如果是直接投放原始素材而非裂变产出）
-    material_id = Column(Integer, comment="关联素材 ID")
+    material_id = Column(Integer, ForeignKey("material.id", ondelete="CASCADE"), comment="关联素材 ID")
 
     # 关联的裂变素材 ID（如果是裂变产出素材的投放数据）
-    fission_id = Column(Integer, comment="关联裂变素材 ID")
+    fission_id = Column(Integer, ForeignKey("fission.id", ondelete="CASCADE"), comment="关联裂变素材 ID")
 
     # 投放平台标识（如"抖音"、"小红书"等）
     platform = Column(String(50), comment="投放平台")

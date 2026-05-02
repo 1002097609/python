@@ -58,6 +58,10 @@
         >
           <!-- 编辑态：显示输入框 -->
           <template v-if="editingId === tag.id">
+            <!-- 编辑保护提示 -->
+            <div class="tag-edit-warning" v-if="tag._usageCount > 0">
+              ⚠️ 此标签正被 <strong>{{ tag._usageCount }}</strong> 个素材使用，修改名称/类型将影响所有关联素材
+            </div>
             <div class="tag-edit-row">
               <el-input v-model="editForm.name" size="small" style="width:120px" @keyup.enter="handleSaveEdit(tag)" />
               <el-select v-model="editForm.type" size="small" style="width:110px">
@@ -94,6 +98,7 @@
             >
               {{ tag.name }}
               <span v-if="tag.option_id" class="option-linked" title="已关联选项">🔗</span>
+              <span v-if="tag._usageCount > 0" class="usage-badge" title="被使用次数">{{ tag._usageCount }}</span>
             </el-tag>
             <el-button type="primary" link size="small" @click="openEdit(tag)">编辑</el-button>
           </template>
@@ -107,7 +112,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api, { getTags, getOptionsByGroup, createTag, updateTag, deleteTag, createTagFromOption } from '../api'
 
@@ -178,6 +183,15 @@ const fetchTags = async () => {
   try {
     const data = await getTags()
     allTags.value = data
+    // 批量加载每个标签的使用量（用于编辑保护提示）
+    for (const tag of allTags.value) {
+      try {
+        const { data: usage } = await api.get(`/tag/${tag.id}/usage`)
+        tag._usageCount = usage.usage_count || 0
+      } catch (e) {
+        tag._usageCount = 0
+      }
+    }
   } catch (e) {
     ElMessage.error('加载标签失败')
   }
@@ -233,11 +247,19 @@ const handleAdd = async () => {
   }
 }
 
-const openEdit = (tag) => {
+const openEdit = async (tag) => {
   editingId.value = tag.id
   editForm.name = tag.name
   editForm.type = tag.type
   editForm.option_id = tag.option_id || null
+
+  // 检查使用情况，用于编辑时的保护提示
+  try {
+    const { data } = await api.get(`/tag/${tag.id}/usage`)
+    tag._usageCount = data.usage_count || 0
+  } catch (e) {
+    tag._usageCount = 0
+  }
 }
 
 const cancelEdit = () => {
@@ -246,6 +268,11 @@ const cancelEdit = () => {
   editForm.type = ''
   editForm.option_id = null
 }
+
+// 编辑时切换类型，清空 option_id 避免旧值残留
+watch(() => editForm.type, () => {
+  editForm.option_id = null
+})
 
 // 编辑时按当前类型过滤 option 分组
 const optionGroupsForEdit = (type) => {
@@ -285,20 +312,52 @@ const handleSaveEdit = async (tag) => {
   }
 }
 
-const handleDelete = (tag) => {
-  ElMessageBox.confirm(`确认删除标签「${tag.name}」？`, '警告', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-  }).then(async () => {
-    try {
-      await deleteTag(tag.id)
-      allTags.value = allTags.value.filter(t => t.id !== tag.id)
-      ElMessage.success('标签已删除')
-    } catch (e) {
-      ElMessage.error('删除失败: ' + (e.response?.data?.detail || e.message))
-    }
-  }).catch(() => {})
+const handleDelete = async (tag) => {
+  // 先检查标签使用情况
+  let usageCount = 0
+  try {
+    const { data } = await api.get(`/tag/${tag.id}/usage`)
+    usageCount = data.usage_count || 0
+  } catch (e) {
+    // 接口失败时继续，不阻塞删除
+  }
+
+  if (usageCount > 0) {
+    // 标签被使用：二次确认，显示影响范围
+    ElMessageBox.confirm(
+      `标签「${tag.name}」正被 ${usageCount} 个素材使用。\n删除后这些素材将失去该标签，且不可自动恢复。\n\n确认强制删除？`,
+      '⚠️ 警告：标签正在使用中',
+      {
+        type: 'warning',
+        confirmButtonText: '强制删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+      }
+    ).then(async () => {
+      try {
+        await api.delete(`/tag/${tag.id}?force=true`)
+        allTags.value = allTags.value.filter(t => t.id !== tag.id)
+        ElMessage.success('标签已强制删除')
+      } catch (e) {
+        ElMessage.error('删除失败: ' + (e.response?.data?.detail || e.message))
+      }
+    }).catch(() => {})
+  } else {
+    // 未被使用：普通确认
+    ElMessageBox.confirm(`确认删除标签「${tag.name}」？`, '警告', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    }).then(async () => {
+      try {
+        await deleteTag(tag.id)
+        allTags.value = allTags.value.filter(t => t.id !== tag.id)
+        ElMessage.success('标签已删除')
+      } catch (e) {
+        ElMessage.error('删除失败: ' + (e.response?.data?.detail || e.message))
+      }
+    }).catch(() => {})
+  }
 }
 
 onMounted(() => {
@@ -402,11 +461,34 @@ onMounted(() => {
   gap: 8px;
 }
 
+.tag-edit-warning {
+  font-size: 12px; color: #e6a700;
+  background: #fff8e6; border-left: 3px solid #e6a700;
+  padding: 6px 10px; border-radius: 4px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
 /* 选项关联标识 */
 .option-linked {
   font-size: 10px;
   margin-left: 4px;
   opacity: .7;
+}
+
+/* 使用量徽章 */
+.usage-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(0,0,0,.15);
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+  padding: 0 4px;
 }
 
 /* 空状态 */

@@ -44,10 +44,16 @@ def _skeleton_to_dict(s: Skeleton) -> dict:
         "id": s.id,
         "name": s.name,
         "skeleton_type": s.skeleton_type,
+        "source_material_id": s.source_material_id,
+        "strategy_desc": s.strategy_desc,
+        "structure_json": s.structure_json,
+        "elements_json": s.elements_json,
+        "style_tags": s.style_tags,
         "usage_count": s.usage_count,
-        # Decimal 类型不能直接 JSON 序列化，需要转为 float
         "avg_roi": float(s.avg_roi) if isinstance(s.avg_roi, Decimal) else s.avg_roi,
         "avg_ctr": float(s.avg_ctr) if isinstance(s.avg_ctr, Decimal) else s.avg_ctr,
+        "suitable_for": s.suitable_for,
+        "platform": s.platform,
         "created_at": s.created_at,
     }
 
@@ -59,7 +65,7 @@ def list_skeletons(
     keyword: Optional[str] = Query(None, description="按名称/描述关键词搜索"),
     sort_by: str = Query("usage_count", pattern="^(usage_count|avg_roi|avg_ctr|created_at)$"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
     """
@@ -100,6 +106,28 @@ def list_skeletons(
         "page": page,
         "page_size": page_size,
     }
+
+
+@router.put("/{skeleton_id}")
+def update_skeleton(skeleton_id: int, data: dict, db: Session = Depends(get_db)):
+    """
+    更新骨架信息。支持部分更新。
+
+    可更新字段：name / skeleton_type / platform / strategy_desc /
+               structure_json / elements_json / style_tags / suitable_for
+    """
+    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+    if not skeleton:
+        raise HTTPException(status_code=404, detail="骨架不存在")
+
+    for key, value in data.items():
+        if hasattr(skeleton, key) and value is not None:
+            setattr(skeleton, key, value)
+
+    db.commit()
+    db.refresh(skeleton)
+    log_operation(db, "skeleton", skeleton.id, "update", {"changed_fields": list(data.keys())})
+    return _skeleton_to_dict(skeleton)
 
 
 @router.get("/{skeleton_id}")
@@ -181,11 +209,25 @@ def create_skeleton_from_dismantle(dismantle_id: int, db: Session = Depends(get_
     if not dismantle:
         raise HTTPException(status_code=404, detail="拆解记录不存在")
 
+    # 幂等检查：如果该拆解记录已经提取过骨架，直接返回已有的
+    if dismantle.skeleton_id:
+        existing = db.query(Skeleton).filter(Skeleton.id == dismantle.skeleton_id).first()
+        if existing:
+            return {"skeleton_id": existing.id, "name": existing.name, "message": "该拆解记录已提取过骨架，返回已有骨架"}
+
     # 根据 L3 结构层的段落名称推断骨架类型（如"测评对比型"、"红黑榜型"等）
     skeleton_type = _infer_skeleton_type(dismantle.l3_structure)
 
     # 拼接骨架名称：类型 + 主题，截断至 100 字符以内
     name = f"{skeleton_type} — {dismantle.l1_topic or '未命名'}"[:100]
+
+    # 从关联素材获取平台信息
+    from ..models.material import Material
+    material = db.query(Material).filter(Material.id == dismantle.material_id).first()
+    platform = material.platform if material else None
+
+    # 从 L4 元素层提取风格标签（如钩子类型、过渡方式等），而非使用 L2 策略标签
+    style_tags = _extract_style_tags(dismantle.l4_elements)
 
     # 从拆解记录的各层数据中提取骨架所需的字段
     skeleton = Skeleton(
@@ -195,7 +237,8 @@ def create_skeleton_from_dismantle(dismantle_id: int, db: Session = Depends(get_
         strategy_desc=dismantle.l2_emotion,         # 策略层 -> 策略描述
         structure_json=dismantle.l3_structure,       # 结构层 -> 骨架 JSON
         elements_json=dismantle.l4_elements,         # 元素层 -> 元素 JSON
-        style_tags=dismantle.l2_strategy,            # 策略层 -> 风格标签列表
+        style_tags=style_tags,                       # 从 L4 提取的风格标签
+        platform=platform,                           # 继承素材的平台
     )
     db.add(skeleton)
     db.flush()  # .flush() 获取自增 ID 但不提交事务
@@ -240,16 +283,58 @@ def _infer_skeleton_type(l3_structure) -> str:
     names = [s.get("name", "") for s in structure]
     names_str = ",".join(names)
 
-    # 根据段落名称中的关键词判定骨架类型
-    if "测评" in names_str or "对比" in names_str:
-        return "测评对比型"
-    if "红榜" in names_str or "黑榜" in names_str:
-        return "红黑榜型"
-    if "误区" in names_str:
-        return "误区纠正型"
-    if "步骤" in names_str:
-        return "教程步骤型"
-    return "通用型"
+    # 根据段落名称中的关键词判定骨架类型（按匹配数量取最优）
+    scores = {
+        "测评对比型": sum(1 for kw in ("测评", "对比", "横评", "实测", "亲测") if kw in names_str),
+        "红黑榜型":  sum(1 for kw in ("红榜", "黑榜", "榜单", "推荐", "排行") if kw in names_str),
+        "误区纠正型": sum(1 for kw in ("误区", "避坑", "踩雷", "注意", "千万别") if kw in names_str),
+        "教程步骤型": sum(1 for kw in ("步骤", "教程", "方法", "做法", "流程", "攻略") if kw in names_str),
+        "故事叙事型": sum(1 for kw in ("故事", "经历", "分享", "日记", "记录") if kw in names_str),
+    }
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "通用型"
+
+
+def _extract_style_tags(l4_elements) -> list:
+    """
+    从 L4 元素层数据中提取风格标签。
+
+    L4 元素层包含钩子句式、标题公式、过渡方式、互动引导等，
+    这些元素决定了素材的视觉/表达风格，适合作为骨架的风格标签。
+
+    参数：
+        l4_elements: L4 元素数据，可以是 JSON 字符串或已解析的 dict。
+
+    返回值：
+        list: 风格标签字符串列表。
+    """
+    if not l4_elements:
+        return []
+
+    import json
+    elements = json.loads(l4_elements) if isinstance(l4_elements, str) else l4_elements
+    if not isinstance(elements, dict):
+        return []
+
+    tags = []
+    # 提取钩子类型作为风格标签
+    hook = elements.get("hook", "")
+    if hook:
+        tags.append(hook)
+    # 提取标题公式作为风格标签
+    title_formula = elements.get("title_formula", "")
+    if title_formula:
+        tags.append(title_formula)
+    # 提取过渡方式
+    transition = elements.get("transition", "")
+    if transition:
+        tags.append(transition)
+    # 提取互动引导方式
+    interaction = elements.get("interaction", "")
+    if interaction:
+        tags.append(interaction)
+
+    return tags
 
 
 @router.post("/import")

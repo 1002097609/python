@@ -53,10 +53,10 @@ class Fission(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # 使用的骨架 ID，非空，指定本次裂变基于哪个内容骨架
-    skeleton_id = Column(Integer, nullable=False, comment="使用的骨架 ID")
+    skeleton_id = Column(Integer, ForeignKey("skeleton.id", ondelete="CASCADE"), nullable=False, comment="使用的骨架 ID")
 
     # 母体素材 ID（可选），指明本次裂变是在哪个现有素材基础上进行的
-    source_material_id = Column(Integer, comment="母体素材 ID")
+    source_material_id = Column(Integer, ForeignKey("material.id", ondelete="SET NULL"), comment="母体素材 ID")
 
     # 裂变模式：
     # replace_leaf = 换叶子（替换主题+表达，骨架不变，效果保留约 85%）
@@ -111,8 +111,9 @@ class Fission(Base):
     # 创建时间，自动设置为当前时间
     created_at = Column(DateTime, server_default=func.now())
 
-    # 索引：按骨架 ID 和产出状态加速查询
+    # 索引：按骨架 ID、产出状态、母体素材加速查询
     __table_args__ = (
-        Index("idx_fission_skeleton", "skeleton_id"),  # 查找某个骨架的所有裂变记录
-        Index("idx_fission_status", "output_status"),  # 按产出状态筛选（如查看所有草稿）
+        Index("idx_fission_skeleton", "skeleton_id"),          # 查找某个骨架的所有裂变记录
+        Index("idx_fission_status", "output_status"),          # 按产出状态筛选
+        Index("idx_fission_source_material", "source_material_id"),  # 按母体素材查找
     )

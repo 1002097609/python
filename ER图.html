@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>营销素材拆解与裂变系统 — ER图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 16px;
+  }
+  h1 { text-align: center; font-size: 18px; font-weight: 600; color: #f1f5f9; margin-bottom: 4px; }
+  .subtitle { text-align: center; font-size: 12px; color: #94a3b8; margin-bottom: 12px; }
+  .diagram-container {
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+  .legend {
+    display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid #334155;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94a3b8; }
+  .legend-color { width: 20px; height: 12px; border-radius: 3px; }
+  .note { text-align: center; margin-top: 10px; font-size: 11px; color: #64748b; }
+
+</style>
+</head>
+<body>
+
+<h1>营销素材拆解与裂变系统 — ER 图</h1>
+<p class="subtitle">8 张表 · MySQL 8.0</p>
+
+<div class="diagram-container">
+  <div class="mermaid" id="mermaid-erd">
+erDiagram
+    MATERIAL["素材表"] {
+        int id PK "主键"
+        string title "素材标题"
+        text content "原始内容"
+        string platform "投放平台"
+        string category "业务品类"
+        string media_type "素材类型"
+        string source_url "原始链接"
+        int status "拆解状态"
+    }
+
+    DISMANTLE["拆解表"] {
+        int id PK "主键"
+        int material_id FK "关联素材"
+        string l1_topic "L1主题描述"
+        string l1_core_point "L1核心卖点"
+        json l2_strategy "L2策略标签"
+        string l2_emotion "L2情绪策略"
+        json l3_structure "L3结构段落"
+        string l3_summary "L3一句话概述"
+        json l4_elements "L4元素模块"
+        json l5_expressions "L5具体表达"
+        int skeleton_id FK "提取的骨架"
+    }
+
+    SKELETON["骨架表"] {
+        int id PK "主键"
+        string name "骨架名称"
+        string skeleton_type "骨架类型"
+        int source_material_id "来源素材"
+        string strategy_desc "L2策略描述"
+        json structure_json "L3结构模板"
+        json elements_json "L4元素模板"
+        json style_tags "适用风格"
+        int usage_count "使用次数"
+        decimal avg_roi "平均ROI"
+        decimal avg_ctr "平均点击率"
+        json suitable_for "适用场景"
+        string platform "适用平台"
+    }
+
+    FISSION["裂变表"] {
+        int id PK "主键"
+        int skeleton_id FK "使用骨架"
+        int source_material_id FK "母体素材"
+        string fission_mode "裂变模式"
+        string new_topic "新主题"
+        string new_category "新品类"
+        string new_platform "新平台"
+        string new_style "新风格"
+        json replacement_json "替换映射"
+        string output_title "产出标题"
+        text output_content "产出内容"
+        int output_status "产出状态"
+        string predicted_ctr "预测点击率"
+        string predicted_roi "预测ROI"
+        decimal actual_ctr "实际点击率"
+        decimal actual_roi "实际ROI"
+    }
+
+    EFFECT_DATA["效果数据表"] {
+        int id PK "主键"
+        int material_id FK "关联素材"
+        int fission_id FK "关联裂变"
+        string platform "投放平台"
+        int impressions "展示量"
+        int clicks "点击量"
+        decimal ctr "点击率"
+        int conversions "转化量"
+        decimal cvr "转化率"
+        decimal cost "花费"
+        decimal revenue "收入"
+        decimal roi "投资回报率"
+        decimal cpa "转化成本"
+        date stat_date "统计日期"
+    }
+
+    TAG["标签表"] {
+        int id PK "主键"
+        string name "标签名称"
+        string type "标签维度"
+        int option_id FK "关联配置"
+    }
+
+    MATERIAL_TAG["素材标签关联表"] {
+        int material_id PK,FK "素材"
+        int tag_id PK,FK "标签"
+    }
+
+    OPTION["选项配置表"] {
+        int id PK "主键"
+        string group_key "分组标识"
+        string label "显示文本"
+        string value "实际值"
+        int sort_order "排序权重"
+        int is_active "是否启用"
+    }
+
+    MATERIAL ||--o| DISMANTLE : "一个素材对应一个拆解"
+    DISMANTLE }o--|| SKELETON : "拆解提炼出骨架"
+    MATERIAL ||--o{ SKELETON : "素材可提炼多个骨架"
+    SKELETON ||--o{ FISSION : "骨架可多次裂变"
+    MATERIAL ||--o{ FISSION : "素材关联多次裂变"
+    FISSION ||--o{ EFFECT_DATA : "裂变产出多条效果"
+    MATERIAL ||--o{ EFFECT_DATA : "素材有多条效果"
+    MATERIAL ||--o{ MATERIAL_TAG : "素材打多个标签"
+    TAG ||--o{ MATERIAL_TAG : "标签属于多个素材"
+    OPTION ||--o{ TAG : "配置关联标签"
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background:#3b82f6"></div><span>核心业务流 (素材→拆解→骨架→裂变)</span></div>
+  <div class="legend-item"><div class="legend-color" style="background:#10b981"></div><span>效果闭环 (效果数据回写)</span></div>
+  <div class="legend-item"><div class="legend-color" style="background:#f59e0b"></div><span>标签体系 (多维度分类)</span></div>
+  <div class="legend-item"><div class="legend-color" style="background:#8b5cf6"></div><span>配置管理 (动态选项)</span></div>
+</div>
+
+<p class="note">数据流：素材 → 拆解(L1-L5) → 骨架提取 → 裂变(骨架×新元素) → 新素材 → 效果回写 → 骨架优化</p>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    er: {
+      useMaxWidth: true,
+      layoutDirection: 'LR',
+      minEntityWidth: 160,
+      minEntityHeight: 40
+    },
+    themeVariables: {
+      primaryColor: '#3b82f6',
+      primaryTextColor: '#f1f5f9',
+      primaryBorderColor: '#475569',
+      lineColor: '#64748b',
+      secondaryColor: '#1e3a5f',
+      tertiaryColor: '#1e293b',
+      background: '#1e293b',
+      mainBkg: '#1e293b',
+      nodeBorder: '#475569',
+      clusterBkg: '#0f172a',
+      titleColor: '#f1f5f9',
+      edgeLabelBackground: '#334155',
+      fontSize: '12px'
+    }
+  });
+
+</script>
+
+</body>
+</html>

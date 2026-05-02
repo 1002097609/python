@@ -41,7 +41,7 @@ class Dismantle(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # 关联的素材 ID，非空，指明本次拆解是针对哪个素材的
-    material_id = Column(Integer, nullable=False, comment="关联素材 ID")
+    material_id = Column(Integer, ForeignKey("material.id", ondelete="CASCADE"), nullable=False, comment="关联素材 ID")
 
     # ==================== L1 主题层（素材讲什么） ====================
     # 主题描述，如"黄褐斑的瓦解过程见证"
@@ -77,7 +77,7 @@ class Dismantle(Base):
 
     # ==================== 元数据 ====================
     # 从本拆解中提炼出的骨架 ID，关联 skeleton 表
-    skeleton_id = Column(Integer, comment="提取出的骨架 ID")
+    skeleton_id = Column(Integer, ForeignKey("skeleton.id", ondelete="SET NULL"), comment="提取出的骨架 ID")
 
     # 执行拆解的用户标识
     dismantled_by = Column(String(50), comment="拆解人")

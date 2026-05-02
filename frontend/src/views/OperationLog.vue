@@ -20,6 +20,8 @@
             <el-option label="效果数据" value="effect" />
             <el-option label="标签" value="tag" />
             <el-option label="选项" value="option" />
+            <el-option label="裂变预设" value="fission_preset" />
+            <el-option label="效果数据" value="effect_data" />
           </el-select>
           <el-select v-model="filterAction" placeholder="操作类型" clearable style="width:130px">
             <el-option label="创建" value="create" />
@@ -34,6 +36,9 @@
       </div>
 
       <el-table :data="logs" v-loading="loading" stripe style="width:100%">
+        <template #empty>
+          <el-empty description="暂无操作日志" :image-size="80" />
+        </template>
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="detail-box">
@@ -90,7 +95,7 @@ const pageSize = ref(20)
 const filterEntityType = ref('')
 const filterAction = ref('')
 
-const entityTypeLabels = { material: '素材', skeleton: '骨架', fission: '裂变', effect: '效果数据', tag: '标签', option: '选项' }
+const entityTypeLabels = { material: '素材', skeleton: '骨架', fission: '裂变', effect: '效果数据', effect_data: '效果数据', tag: '标签', option: '选项', fission_preset: '裂变预设' }
 const entityTypeTags = { material: 'primary', skeleton: 'success', fission: 'warning', effect: 'info', tag: '', option: '' }
 const actionLabels = { create: '创建', update: '更新', status_change: '状态变更', delete: '删除', import: '导入', export: '导出' }
 const actionTags = { create: 'success', update: 'primary', status_change: 'warning', delete: 'danger', import: 'info', export: '' }

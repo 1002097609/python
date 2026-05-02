@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from ..database import get_db
 from ..models.material import Material
-from ..schemas.material import MaterialCreate, MaterialUpdate, MaterialResponse
+from ..schemas.material import MaterialCreate, MaterialUpdate, MaterialResponse, BatchStatusUpdate
 from ..services.operation_log import log_operation
 
 # 创建素材管理专用路由器
@@ -56,7 +56,8 @@ def list_materials(
     platform: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     status: Optional[int] = Query(None),
-    tag_id: Optional[int] = Query(None, description="按标签 ID 筛选"),
+    tag_id: Optional[int] = Query(None, description="按标签 ID 筛选（单标签，兼容旧接口）"),
+    tag_ids: Optional[str] = Query(None, description="按多个标签 ID 筛选，逗号分隔，如 1,2,3"),
     keyword: Optional[str] = Query(None, description="按标题关键词搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -89,8 +90,15 @@ def list_materials(
         query = query.filter(Material.status == status)
 
     # 标签筛选：通过 material_tag 关联表 JOIN 过滤
-    if tag_id is not None:
-        from ..models.tag import MaterialTag
+    from ..models.tag import MaterialTag
+    if tag_ids:
+        # 多标签筛选：素材包含任意一个指定标签即匹配（OR 语义）
+        ids = [int(x) for x in tag_ids.split(',') if x.strip().isdigit()]
+        if ids:
+            query = query.join(MaterialTag, Material.id == MaterialTag.material_id)
+            query = query.filter(MaterialTag.tag_id.in_(ids))
+            query = query.distinct()
+    elif tag_id is not None:
         query = query.join(MaterialTag, Material.id == MaterialTag.material_id)
         query = query.filter(MaterialTag.tag_id == tag_id)
 
@@ -157,6 +165,36 @@ def update_material(material_id: int, data: MaterialUpdate, db: Session = Depend
     db.refresh(material)
     log_operation(db, "material", material.id, "update", {"changed_fields": list(changed_fields.keys())})
     return material
+
+
+@router.put("/batch/status")
+def batch_update_material_status(
+    data: BatchStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    批量更新多个素材的状态。
+
+    请求体：
+        {"ids": [1, 2, 3], "status": 1}
+
+    返回值：
+        {"updated": 3}
+
+    异常：
+        HTTP 422: ids 为空或 status 不在合法值域（0/1/2）中时抛出。
+    """
+    if not data.ids:
+        raise HTTPException(status_code=422, detail="ids 不能为空")
+    if data.status not in (0, 1, 2):
+        raise HTTPException(status_code=422, detail="status 必须为 0（未拆解）、1（已拆解）或 2（已归档）")
+    updated = db.query(Material).filter(Material.id.in_(data.ids)).update(
+        {"status": data.status}, synchronize_session=False
+    )
+    db.commit()
+    for mid in data.ids:
+        log_operation(db, "material", mid, "status_change", {"status": data.status})
+    return {"updated": updated}
 
 
 @router.delete("/{material_id}", status_code=204)

@@ -63,8 +63,8 @@ class Option(Base):
     # 创建时间，自动设置为当前时间
     created_at = Column(DateTime, server_default=func.now())
 
-    # 索引：按分组和启用状态加速查询，前端请求时最常见的查询模式
+    # 索引：按分组+启用状态复合索引，覆盖最常见查询模式
     __table_args__ = (
-        Index("idx_option_group", "group_key"),    # 按分组获取所有选项（如获取全部平台列表）
-        Index("idx_option_active", "is_active"),   # 过滤禁用选项（通常只查启用的）
+        Index("idx_option_group_active", "group_key", "is_active"),  # 按分组获取启用选项（最常用）
+        Index("idx_option_group_sort", "group_key", "sort_order"),  # 按分组排序
     )
