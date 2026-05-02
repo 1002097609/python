@@ -16,7 +16,7 @@
   stat_date: 数据统计日期
 """
 
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Index, DECIMAL
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Index, UniqueConstraint, DECIMAL
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -87,8 +87,9 @@ class EffectData(Base):
     # 创建时间，自动设置为当前时间
     created_at = Column(DateTime, server_default=func.now())
 
-    # 索引：按素材 ID、裂变 ID、统计日期加速查询
+    # 唯一约束 + 索引
     __table_args__ = (
+        UniqueConstraint("fission_id", "stat_date", "platform", name="uk_effect_fission_date_platform"),
         Index("idx_effect_material", "material_id"),  # 查询某原始素材的所有效果数据
         Index("idx_effect_fission", "fission_id"),    # 查询某裂变素材的所有效果数据
         Index("idx_effect_date", "stat_date"),         # 按日期范围查询（如近7天数据）

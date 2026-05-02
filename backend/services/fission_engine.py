@@ -88,26 +88,41 @@ def _build_leaf_block(section, section_name, new_topic, gs, dr, custom_hook,
     return "\n".join(lines) if lines else ""
 
 
-def _build_branch_block(section, section_name, l3_data, gs, dr):
-    """replace_branch 模式：保持主题策略不变，替换结构和元素。"""
+def _build_branch_block(section, section_name, l3_data, gs, dr, new_topic):
+    """replace_branch 模式：保持主题策略不变，替换结构和元素。
+
+    l3_data: 用户传入的新段落结构列表 [{name, function, ratio, template}]
+             引擎会用新结构替换骨架中的对应段落。
+    """
     lines = []
-    branch_content = l3_data.get(section_name, {})
 
-    if isinstance(branch_content, dict):
-        text = branch_content.get("content", "")
-    elif isinstance(branch_content, str):
-        text = branch_content
-    else:
-        text = ""
+    # l3_data 是新段落结构列表，按索引匹配
+    if isinstance(l3_data, list) and l3_data:
+        # 找到当前 section 对应的新段落（按索引匹配）
+        idx = section.get("_idx", 0)
+        if idx < len(l3_data):
+            new_sec = l3_data[idx]
+            template = new_sec.get("template", "")
+            if template and new_topic:
+                lines.append(f"  {_fill_template(template, new_topic, dr)}")
+            elif template:
+                lines.append(f"  {template}")
+            elif new_topic:
+                lines.append(f"  [请围绕「{new_topic}」撰写{new_sec.get('name', section_name)}内容]")
+            if gs:
+                lines.append(f"  💬 {gs}")
+            if dr:
+                lines.append(f"  📊 数据支撑：{dr}")
+            return "\n".join(lines) if lines else ""
 
-    if text:
-        lines.append(f"  {text}")
+    # 降级：沿用原骨架段落模板
+    section_template = section.get("template", "")
+    if section_template and new_topic:
+        lines.append(f"  {_fill_template(section_template, new_topic, dr)}")
+    elif section_template:
+        lines.append(f"  {section_template}")
     else:
-        section_content = section.get("content", "")
-        if section_content:
-            lines.append(f"  {section_content}")
-        else:
-            lines.append(f"  [请填写新的{section_name}内容]")
+        lines.append(f"  [请填写新的{section_name}内容]")
 
     if gs:
         lines.append(f"  💬 {gs}")
@@ -118,22 +133,30 @@ def _build_branch_block(section, section_name, l3_data, gs, dr):
 
 
 def _build_style_block(section_name, new_strategy, gs, dr, custom_hook,
-                       custom_interaction, l2_data):
-    """replace_style 模式：保持骨架不变，替换策略和表达。"""
+                       custom_interaction, l2_data, new_topic):
+    """replace_style 模式：保持骨架结构不变，替换策略风格和表达。
+
+    l2_data: 用户传入的新策略数据 {strategy_desc, hook, interaction, emotion}
+    """
     name_lower = section_name.lower()
-    is_hook = any(k in name_lower for k in ("开头", "痛点", "共鸣", "钩子"))
-    is_body = any(k in name_lower for k in ("主体", "卖点", "核心", "论证", "展示"))
-    is_ending = any(k in name_lower for k in ("结尾", "互动", "收尾", "号召"))
+    is_hook = any(k in name_lower for k in ("开头", "痛点", "共鸣", "钩子", "引入"))
+    is_body = any(k in name_lower for k in ("主体", "卖点", "核心", "论证", "展示", "测评"))
+    is_ending = any(k in name_lower for k in ("结尾", "互动", "收尾", "号召", "转化"))
 
     lines = []
     strategy_tag = f"「{new_strategy}」" if new_strategy else ""
+    emotion = l2_data.get("emotion", "") if l2_data else ""
+    emotion_tag = f"、{emotion}" if emotion else ""
 
     if is_hook:
-        hook = l2_data.get("hook") or custom_hook
+        # 优先使用用户自定义的钩子
+        hook = (l2_data.get("hook") if l2_data else None) or custom_hook
         if hook:
             lines.append(f"  {hook}")
+        elif new_topic:
+            lines.append(f"  用{strategy_tag}{emotion_tag}风格，围绕「{new_topic}」撰写开头钩子")
         else:
-            lines.append(f"  请用{strategy_tag}风格撰写开头钩子")
+            lines.append(f"  请用{strategy_tag}{emotion_tag}风格撰写开头钩子")
 
     elif is_body:
         if gs:
@@ -141,20 +164,27 @@ def _build_style_block(section_name, new_strategy, gs, dr, custom_hook,
         if dr:
             lines.append(f"  📊 数据支撑：{dr}")
         if not gs and not dr:
-            lines.append(f"  请用{strategy_tag}风格重写{section_name}内容")
+            if new_topic:
+                lines.append(f"  请用{strategy_tag}{emotion_tag}风格，围绕「{new_topic}」重写{section_name}内容")
+            else:
+                lines.append(f"  请用{strategy_tag}{emotion_tag}风格重写{section_name}内容")
 
     elif is_ending:
-        interaction = l2_data.get("interaction") or custom_interaction
+        interaction = (l2_data.get("interaction") if l2_data else None) or custom_interaction
         if interaction:
             lines.append(f"  {interaction}")
+        elif new_topic:
+            lines.append(f"  请用{strategy_tag}{emotion_tag}风格，围绕「{new_topic}」设计互动收尾")
         else:
-            lines.append(f"  请用{strategy_tag}风格设计互动收尾")
+            lines.append(f"  请用{strategy_tag}{emotion_tag}风格设计互动收尾")
 
     else:
         if gs:
             lines.append(f"  💬 {gs}")
+        elif new_topic:
+            lines.append(f"  请用{strategy_tag}{emotion_tag}风格，围绕「{new_topic}」填写{section_name}")
         else:
-            lines.append(f"  请用{strategy_tag}风格填写{section_name}")
+            lines.append(f"  请用{strategy_tag}{emotion_tag}风格填写{section_name}")
 
     return "\n".join(lines) if lines else ""
 
@@ -223,6 +253,7 @@ def generate_output(fission_mode, structure, elements, strategy, new_topic, repl
 
     # 生成正文段落
     for idx, section in enumerate(sections):
+        section["_idx"] = idx
         section_name = section.get("name", f"段落{idx+1}")
         section_func = section.get("function", "")
         section_ratio = section.get("ratio", 0)
@@ -248,6 +279,7 @@ def generate_output(fission_mode, structure, elements, strategy, new_topic, repl
                 l3_data=l3_data,
                 gs=gs_per_section[idx] if idx < len(gs_per_section) else "",
                 dr=dr_per_section[idx] if idx < len(dr_per_section) else "",
+                new_topic=new_topic,
             )
             if block:
                 paragraph_blocks.append(block)
@@ -260,6 +292,7 @@ def generate_output(fission_mode, structure, elements, strategy, new_topic, repl
                 dr=dr_per_section[idx] if idx < len(dr_per_section) else "",
                 custom_hook=custom_hook, custom_interaction=custom_interaction,
                 l2_data=l2_data,
+                new_topic=new_topic,
             )
             if block:
                 paragraph_blocks.append(block)

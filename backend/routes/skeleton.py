@@ -179,9 +179,17 @@ def delete_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
 
     name = skeleton.name
     fissions_count = len(fissions)
+    source_material_id = skeleton.source_material_id
     db.delete(skeleton)
     db.commit()
     log_operation(db, "skeleton", skeleton_id, "delete", {"name": name, "cascade_fissions": fissions_count})
+
+    # 回退关联素材状态为"未拆解"，因为骨架已不存在
+    if source_material_id:
+        from ..models.material import Material
+        material = db.query(Material).filter(Material.id == source_material_id).first()
+        if material:
+            material.status = 0
 
 
 @router.post("/from-dismantle/{dismantle_id}")

@@ -275,6 +275,74 @@
               </template>
             </div>
 
+            <!-- L3 结构替换（换枝杈模式） -->
+            <div class="form-section" v-if="fissionMode === 'replace_branch'">
+              <div class="form-section-title">🏗️ L3 结构替换 — 新段落结构</div>
+              <div class="step-desc">为每个段落填写新的名称、功能和占比（总和需为 100%）</div>
+              <div class="l3-sections-list">
+                <div v-for="(sec, sIdx) in l3ReplacementSections" :key="sIdx" class="l3-section-item">
+                  <div class="l3-section-header">
+                    <span class="l3-section-num">段落 {{ sIdx + 1 }}</span>
+                    <el-button v-if="l3ReplacementSections.length > 1" type="danger" link size="small" @click="removeL3Section(sIdx)">✕ 移除</el-button>
+                  </div>
+                  <el-row :gutter="12">
+                    <el-col :span="8">
+                      <el-form-item label="段落名称">
+                        <el-input v-model="sec.name" placeholder="如：开场钩子" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="功能说明">
+                        <el-input v-model="sec.function" placeholder="如：吸引注意" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="占比 (%)">
+                        <el-input-number v-model="sec.ratio" :min="0" :max="100" :step="5" style="width:100%" />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-form-item label="模板句式">
+                    <el-input v-model="sec.template" type="textarea" :rows="2" placeholder="该段落的模板句式，可用 {topic} 作为主题占位符" />
+                  </el-form-item>
+                </div>
+                <el-button type="primary" link @click="addL3Section" class="add-l3-btn">+ 添加段落</el-button>
+              </div>
+              <div class="l3-ratio-hint" :class="{ 'l3-ratio-error': l3RatioSum !== 100 }">
+                当前占比总和：{{ l3RatioSum }}% <span v-if="l3RatioSum !== 100">（需为 100%）</span>
+              </div>
+            </div>
+
+            <!-- L2 策略替换（换表达模式） -->
+            <div class="form-section" v-if="fissionMode === 'replace_style'">
+              <div class="form-section-title">🎭 L2 策略替换 — 新策略风格</div>
+              <div class="step-desc">定义新的策略标签和情绪描述</div>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="新策略描述">
+                    <el-input v-model="fissionForm.replacement.L2.strategy_desc" type="textarea" :rows="3" placeholder="如：专业测评+数据驱动，用实验数据说话" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="新钩子句式">
+                    <el-input v-model="fissionForm.replacement.L2.hook" placeholder="如：90%的人都不知道的真相" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="新互动设计">
+                    <el-input v-model="fissionForm.replacement.L2.interaction" placeholder="如：你遇到过这种情况吗？评论区聊聊" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="新情绪策略">
+                    <el-input v-model="fissionForm.replacement.L2.emotion" placeholder="如：紧迫感+稀缺性" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+
             <!-- 模板预设 -->
             <div class="form-section">
               <div class="form-section-title">📋 模板预设</div>
@@ -476,8 +544,21 @@ const fissionForm = reactive({
   replacement: {
     L5: { golden_sentences: [], data_refs: [], visual_desc: [], hook: '', interaction: '' },
     L4: { hook: '', transition: '', interaction: '' },
+    L3: [],   // replace_branch 模式：新段落结构 [{name, function, ratio, template}]
+    L2: { strategy_desc: '', hook: '', interaction: '', emotion: '' },  // replace_style 模式
   },
 })
+
+// L3 段落结构（replace_branch 模式）
+const l3ReplacementSections = ref([{ name: '', function: '', ratio: 25, template: '' }])
+const l3RatioSum = computed(() => l3ReplacementSections.value.reduce((sum, s) => sum + (s.ratio || 0), 0))
+
+const addL3Section = () => {
+  l3ReplacementSections.value.push({ name: '', function: '', ratio: 0, template: '' })
+}
+const removeL3Section = (idx) => {
+  if (l3ReplacementSections.value.length > 1) l3ReplacementSections.value.splice(idx, 1)
+}
 
 const fissionModeLabel = computed(() => {
   const map = { replace_leaf: '换叶子', replace_branch: '换枝杈', replace_style: '换表达' }
@@ -558,9 +639,19 @@ const validateFissionForm = () => {
   if (mode === 'replace_leaf' && !hasAnyL5) {
     warnings.push('「换叶子」模式建议至少填写 L5 表达层（金句/数据/视觉）中的一项')
   }
-  if (mode === 'replace_branch' && !fissionForm.new_category) {
-    warnings.push('「换枝杈」模式需要填写新品类')
-  }
+	  if (mode === 'replace_branch') {
+	    if (!fissionForm.new_category) warnings.push('「换枝杈」模式需要填写新品类')
+	    const l3Sections = fissionForm.replacement.L3 || []
+	    if (l3Sections.length === 0) { warnings.push('「换枝杈」模式需要至少定义一个 L3 段落') } else {
+	      const emptyName = l3Sections.findIndex(s => !s.name?.trim())
+	      if (emptyName >= 0) warnings.push(`L3 段落 ${emptyName + 1} 缺少名称`)
+	      const ratioSum = l3Sections.reduce((sum, s) => sum + (s.ratio || 0), 0)
+	      if (ratioSum !== 100) warnings.push(`L3 段落占比总和为 ${ratioSum}%，需为 100%`)
+	    }
+	  }
+	  if (mode === 'replace_style') {
+	    if (!fissionForm.replacement.L2?.strategy_desc) warnings.push('「换表达」模式建议填写新策略描述')
+	  }
 
   return warnings
 }
@@ -738,7 +829,10 @@ function parseFissionContent(raw) {
   return sections
 }
 
-const resetFissionForm = () => {
+const resetFissionForm = async () => {
+  try {
+    await ElMessageBox.confirm('重置将清空所有已填写内容，确定继续吗？', '确认重置', { type: 'warning' })
+  } catch { return }
   fissionForm.new_topic = ''
   fissionForm.new_category = ''
   fissionForm.new_style = ''
@@ -746,7 +840,10 @@ const resetFissionForm = () => {
   fissionForm.replacement = {
     L5: { golden_sentences: [], data_refs: [], visual_desc: [], hook: '', interaction: '' },
     L4: { hook: '', transition: '', interaction: '' },
+    L3: [],
+    L2: { strategy_desc: '', hook: '', interaction: '', emotion: '' },
   }
+  l3ReplacementSections.value = [{ name: '', function: '', ratio: 25, template: '' }]
   showL4Overrides.value = false
   batchMode.value = false
   batchGroups.value = [newEmptyGroup()]
@@ -770,7 +867,16 @@ const fetchPresets = async () => {
 
 const openSavePreset = async () => {
   if (!fissionForm.new_topic) { ElMessage.warning('请先填写新主题再保存预设'); return }
-  const name = prompt('输入预设名称：', fissionForm.new_topic)
+  let name = ''
+  try {
+    const { value } = await ElMessageBox.prompt('输入预设名称：', '保存预设', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputValue: fissionForm.new_topic,
+      inputValidator: (v) => v?.trim() ? true : '名称不能为空',
+    })
+    name = value?.trim()
+  } catch { return }
   if (!name) return
   try {
     await createFissionPreset({
@@ -887,6 +993,11 @@ watch(batchMode, (val) => {
   }
 })
 
+// L3 段落数据同步到表单
+watch(l3ReplacementSections, (val) => {
+  fissionForm.replacement.L3 = val.map(s => ({ ...s }))
+}, { deep: true })
+
 onMounted(() => {
   fetchOptions()
   fetchPresets()
@@ -971,6 +1082,25 @@ onMounted(() => {
   background: #f8f9fa; border-radius: 8px;
   font-size: 13px; color: #aaa; text-align: center;
 }
+
+/* L3 section replacement (replace_branch mode) */
+.l3-sections-list { margin-top: 12px; }
+.l3-section-item {
+  padding: 14px; margin-bottom: 12px;
+  background: #f8f9fa; border-radius: 10px;
+  border: 1px solid #ebeef5;
+}
+.l3-section-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.l3-section-num { font-size: 13px; font-weight: 600; color: #667eea; }
+.add-l3-btn { margin-top: 4px; }
+.l3-ratio-hint {
+  margin-top: 8px; padding: 6px 12px; border-radius: 6px;
+  font-size: 13px; color: #555; background: #fff8e6; border-left: 3px solid #e6a700;
+}
+.l3-ratio-error { background: #fef0f0; border-left-color: #f56c6c; color: #c00; }
 
 /* Skeleton option in dropdown */
 .skeleton-filter-bar { display: flex; gap: 8px; margin-top: 12px; }

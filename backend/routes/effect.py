@@ -95,25 +95,43 @@ def _auto_calculate(data: dict) -> dict:
 
 def _update_skeleton_stats(db, skeleton_id: int):
     """
-    更新指定骨架的平均效果统计。
+    更新指定骨架的效果统计（按展示量加权平均）。
 
-    通过关联裂变记录和效果数据表，计算该骨架所有已回写效果数据的平均 ROI 和 CTR，
-    并将结果更新到骨架表中。这是系统的效果闭环关键逻辑：
-    投放后回写 effect_data -> 更新 skeleton.avg_roi/avg_ctr -> 指导下次裂变效果预测。
+    加权算法：
+      - avg_roi = SUM(revenue) / SUM(cost)  （整体投入产出比）
+      - avg_ctr = SUM(clicks) / SUM(impressions) * 100  （整体点击率）
+    相比简单 AVG，加权平均更能反映真实投放效果，避免小样本数据扭曲统计。
+
+    效果闭环：投放回写 effect_data -> 更新 skeleton.avg_roi/avg_ctr -> 指导下次裂变选骨架。
     """
-    from sqlalchemy import func
+    from sqlalchemy import func, case
 
     result = db.query(
-        func.avg(EffectData.roi).label("avg_roi"),
-        func.avg(EffectData.ctr).label("avg_ctr"),
+        func.sum(EffectData.revenue).label("total_revenue"),
+        func.sum(EffectData.cost).label("total_cost"),
+        func.sum(EffectData.clicks).label("total_clicks"),
+        func.sum(EffectData.impressions).label("total_impressions"),
     ).join(Fission, Fission.id == EffectData.fission_id
-    ).filter(Fission.skeleton_id == skeleton_id, EffectData.roi.isnot(None)).first()
+    ).filter(Fission.skeleton_id == skeleton_id).first()
 
-    if result and result.avg_roi:
-        skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
-        if skeleton:
-            skeleton.avg_roi = result.avg_roi
-            skeleton.avg_ctr = result.avg_ctr
+    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+    if not skeleton:
+        return
+
+    total_cost = result.total_cost or 0
+    total_revenue = result.total_revenue or 0
+    total_clicks = result.total_clicks or 0
+    total_impressions = result.total_impressions or 0
+
+    if total_cost > 0:
+        skeleton.avg_roi = total_revenue / total_cost
+    else:
+        skeleton.avg_roi = None
+
+    if total_impressions > 0:
+        skeleton.avg_ctr = total_clicks / total_impressions * 100
+    else:
+        skeleton.avg_ctr = None
 
 
 def _update_fission_actual(db, fission_id: int):
@@ -176,6 +194,9 @@ def create_effect(data: EffectCreate, db: Session = Depends(get_db)):
       3. 如果关联了 fission_id，同步更新裂变记录的实际 ROI 和 CTR
       4. 触发骨架统计更新（效果闭环）
     """
+    if not data.fission_id and not data.material_id:
+        raise HTTPException(status_code=400, detail="fission_id 和 material_id 至少需要传入一个")
+
     raw = data.model_dump(exclude_unset=True)
     raw = _auto_calculate(raw)
     effect = EffectData(**raw)
