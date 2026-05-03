@@ -369,7 +369,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getOptions, getDismantleByMaterial, createDismantle, updateDismantle } from '../api'
+import api, { aiApi, getOptions, getDismantleByMaterial, createDismantle, updateDismantle } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -523,7 +523,7 @@ const runAiAnalyze = async () => {
 
   aiAnalyzing.value = true
   try {
-    const { data } = await api.post('/dismantle/ai-analyze', {
+    const { data } = await aiApi.post('/dismantle/ai-analyze', {
       title: title.trim(),
       content: content.trim(),
       platform: currentMaterial.value?.platform || materialForm.platform || '',

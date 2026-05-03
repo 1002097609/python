@@ -206,7 +206,7 @@ def _call_longcat(title: str, content: str, platform: str = "", category: str = 
     user_message += f"\n\n【内容】\n{content}"
 
     try:
-        with httpx.Client(timeout=60) as client:
+        with httpx.Client(timeout=120) as client:
             response = client.post(
                 f"{LONGCAT_BASE_URL}/v1/messages",
                 headers={

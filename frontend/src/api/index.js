@@ -6,6 +6,12 @@ const api = axios.create({
   timeout: 10000,        // 请求超时时间 10 秒
 })
 
+// AI 接口专用实例（大模型生成耗时较长，需要更长超时）
+const aiApi = axios.create({
+  baseURL: '/api',
+  timeout: 120000,       // AI 请求超时 120 秒
+})
+
 // ============================================================
 // 全局响应拦截器 — 统一错误处理
 // ============================================================
@@ -280,4 +286,5 @@ export async function getOperationLogs(params = {}) {
   return data
 }
 
+export { aiApi }
 export default api
