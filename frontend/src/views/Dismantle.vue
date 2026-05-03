@@ -97,7 +97,12 @@
       <div class="step-block">
         <div class="step-badge">Step 1</div>
         <div class="step-title">{{ editMode ? '编辑拆解' : '新增拆解' }} —— {{ currentMaterial?.title || '未命名素材' }}</div>
-        <el-button v-if="editMode" link type="info" @click="cancelEdit">取消编辑</el-button>
+        <div class="step-actions">
+          <el-button type="warning" @click="runAiAnalyze" :loading="aiAnalyzing" :disabled="!canAiAnalyze" title="AI 自动分析素材内容并填充 L1-L5">
+            ✨ AI 智能拆解
+          </el-button>
+          <el-button v-if="editMode" link type="info" @click="cancelEdit">取消编辑</el-button>
+        </div>
       </div>
 
       <el-form :model="dismantleForm" label-width="100px" class="form-body">
@@ -371,6 +376,7 @@ const router = useRouter()
 
 const loading = ref(false)
 const extracting = ref(false)
+const aiAnalyzing = ref(false)
 const currentMaterial = ref(null)
 const existingDismantle = ref(null)
 const editMode = ref(false)
@@ -495,6 +501,90 @@ const loadDraft = (materialId) => {
   } catch {
     return false
   }
+}
+
+// ============================================================
+// AI 辅助拆解
+// ============================================================
+
+const canAiAnalyze = computed(() => {
+  const title = currentMaterial.value?.title || materialForm.title || ''
+  const content = currentMaterial.value?.content || materialForm.content || ''
+  return title.trim().length > 0 && content.trim().length > 0
+})
+
+const runAiAnalyze = async () => {
+  const title = currentMaterial.value?.title || materialForm.title || ''
+  const content = currentMaterial.value?.content || materialForm.content || ''
+  if (!title.trim() || !content.trim()) {
+    ElMessage.warning('请先填写素材标题和内容')
+    return
+  }
+
+  aiAnalyzing.value = true
+  try {
+    const { data } = await api.post('/dismantle/ai-analyze', {
+      title: title.trim(),
+      content: content.trim(),
+      platform: currentMaterial.value?.platform || materialForm.platform || '',
+      category: currentMaterial.value?.category || materialForm.category || '',
+    })
+
+    // 填充 L1
+    if (data.l1_topic) dismantleForm.l1_topic = data.l1_topic
+    if (data.l1_core_point) dismantleForm.l1_core_point = data.l1_core_point
+
+    // 填充 L2
+    if (data.l2_strategy) dismantleForm.l2_strategy = data.l2_strategy
+    if (data.l2_emotion) dismantleForm.l2_emotion = data.l2_emotion
+
+    // 填充 L3
+    if (data.l3_structure && data.l3_structure.length > 0) {
+      dismantleForm.l3_structure = data.l3_structure.map(s => ({
+        name: s.name || '',
+        function: s.function || '',
+        ratio: Number(s.ratio) || 0,
+        template: s.template || '',
+      }))
+    }
+
+    // 填充 L4
+    if (data.l4_elements) {
+      dismantleForm.l4_elements = {
+        title_formula: data.l4_elements.title_formula || '',
+        hook: data.l4_elements.hook || '',
+        transition: data.l4_elements.transition || '',
+        interaction: data.l4_elements.interaction || '',
+      }
+    }
+
+    // 填充 L5
+    if (data.l5_expressions) {
+      dismantleForm.l5_expressions = {
+        golden_sentences: data.l5_expressions.golden_sentences || [],
+        data_refs: data.l5_expressions.data_refs || [],
+        visual_desc: data.l5_expressions.visual_desc || [],
+      }
+    }
+
+    // 显示 AI 分析元信息
+    const meta = data._meta || {}
+    const infoParts = []
+    if (meta.structure_type) infoParts.push(`结构类型：${meta.structure_type}`)
+    if (meta.detected_category) infoParts.push(`检测品类：${meta.detected_category}`)
+    const infoStr = infoParts.length ? `（${infoParts.join(' / ')}）` : ''
+
+    ElMessage.success(`AI 拆解完成${infoStr}，请检查并修正后保存`)
+
+    // 如果当前不是编辑模式，自动进入编辑模式
+    if (!editMode.value && !existingDismantle.value) {
+      editMode.value = true
+    }
+  } catch (e) {
+    const errMsg = e.response?.data?.detail || e.message
+    ElMessage.error(`AI 拆解失败: ${errMsg}`)
+  }
+  aiAnalyzing.value = false
 }
 
 const clearDraft = (materialId) => {
@@ -789,9 +879,10 @@ const removeSection = (idx) => {
 .dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); }
 .card-title { font-size: 15px; font-weight: 600; color: #333; }
 
-.step-block { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; }
+.step-block { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; flex-wrap: wrap; }
 .step-badge { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0; }
-.step-title { font-size: 16px; font-weight: 600; color: #333; }
+.step-title { font-size: 16px; font-weight: 600; color: #333; flex: 1; }
+.step-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
 .form-body { margin-top: 8px; }
 
