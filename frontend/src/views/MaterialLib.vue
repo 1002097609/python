@@ -44,7 +44,7 @@
           <el-select v-model="filterTagIds" placeholder="按标签筛选" clearable multiple collapse-tags style="width:160px">
             <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
-          <el-input v-model="searchKeyword" placeholder="搜索标题..." style="width:200px" clearable />
+          <el-input v-model="searchKeyword" placeholder="搜索标题或内容..." style="width:220px" clearable />
           <el-button type="primary" size="small" @click="openCreateDialog">➕ 新建素材</el-button>
           <el-button size="small" @click="triggerImportMaterial">📥 导入</el-button>
           <el-dropdown size="small" @command="handleExportMaterial">

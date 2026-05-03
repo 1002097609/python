@@ -102,9 +102,11 @@ def list_materials(
         query = query.join(MaterialTag, Material.id == MaterialTag.material_id)
         query = query.filter(MaterialTag.tag_id == tag_id)
 
-    # 关键词搜索：标题模糊匹配
+    # 关键词搜索：标题 + 内容全文匹配（OR 语义）
     if keyword:
-        query = query.filter(Material.title.contains(keyword))
+        query = query.filter(
+            (Material.title.contains(keyword)) | (Material.content.contains(keyword))
+        )
 
     # 先查总数，再分页取数据
     total = query.count()
