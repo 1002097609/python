@@ -364,6 +364,13 @@
               <el-button type="primary" @click="executeFission" :loading="loading" size="large">
                 ⚡ 开始裂变
               </el-button>
+              <el-button type="warning" @click="executeAiFission" :loading="aiGenerating" size="large" :disabled="!canAiGenerate">
+                ✨ AI 智能生成
+              </el-button>
+              <el-tooltip content="AI 一次性生成多个风格不同的变体" placement="top">
+                <el-input-number v-model="aiVariantCount" :min="1" :max="5" :controls="false" style="width:70px;margin-left:8px" />
+              </el-tooltip>
+              <span style="font-size:12px;color:#999;margin-left:4px">个变体</span>
               <el-button @click="resetFissionForm" size="large">🔄 重置</el-button>
             </el-form-item>
           </el-form>
@@ -386,25 +393,68 @@
       <el-tabs v-if="fissionResults.length > 1" v-model="activeResultTab" type="card" class="result-tabs">
         <el-tab-pane v-for="(res, idx) in fissionResults" :key="idx" :label="`变体 ${idx + 1}`" :name="String(idx)">
           <div class="result-single" :data-result-idx="idx">
-            <div class="result-prediction">
-              <div class="prediction-item"><span class="prediction-label">预测 CTR</span><span class="prediction-value">{{ res.predicted_ctr }}</span></div>
-              <div class="prediction-divider"></div>
-              <div class="prediction-item"><span class="prediction-label">预测 ROI</span><span class="prediction-value prediction-highlight">{{ res.predicted_roi }}</span></div>
+            <!-- AI 匹配度（仅 AI 生成时显示） -->
+            <div class="result-match-score" v-if="res.is_ai">
+              <div class="match-score-badge" :class="matchScoreClass(res.match_score)">
+                <span class="match-score-num">{{ res.match_score }}</span>
+                <span class="match-score-label">匹配度</span>
+              </div>
+              <div class="match-score-reason">{{ res.match_reason }}</div>
             </div>
-            <div class="result-content-wrapper">
-              <div class="result-content-label">📝 裂变产出内容</div>
-              <div class="result-content-sections">
-                <div v-for="(section, sidx) in parseFissionContent(res.output_content)" :key="sidx" class="result-section" :class="section.type">
-                  <div class="section-header" v-if="section.header"><span class="section-icon">{{ section.icon }}</span><span class="section-title-text">{{ section.header }}</span></div>
-                  <div class="section-body" v-if="section.lines.length">
-                    <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
-                      <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
-                      <span class="line-text">{{ line.text }}</span>
+            <div class="result-prediction">
+              <div class="prediction-item"><span class="prediction-label">预测 CTR</span><span class="prediction-value">{{ res.predicted_ctr || res.predicted_ctr_range }}</span></div>
+              <div class="prediction-divider"></div>
+              <div class="prediction-item"><span class="prediction-label">预测 ROI</span><span class="prediction-value prediction-highlight">{{ res.predicted_roi || res.predicted_roi_range }}</span></div>
+            </div>
+            <!-- AI 生成：展示完整文案 -->
+            <template v-if="res.is_ai">
+              <div class="result-content-wrapper">
+                <div class="result-content-label">
+                  📝 AI 生成文案
+                  <el-tag size="small" type="warning" effect="plain" style="margin-left:8px">✨ AI</el-tag>
+                </div>
+                <div class="ai-result-title" v-if="res.title">
+                  <span class="ai-title-label">标题：</span>
+                  <span class="ai-title-text">{{ res.title }}</span>
+                </div>
+                <div class="ai-result-alt-titles" v-if="res.alt_titles && res.alt_titles.length">
+                  <span class="ai-alt-label">备用标题：</span>
+                  <span v-for="(t, ti) in res.alt_titles" :key="ti" class="ai-alt-title">{{ t }}</span>
+                </div>
+                <div class="ai-result-content">{{ res.content || res.output_content }}</div>
+                <div class="ai-result-hook" v-if="res.hook">
+                  <span class="ai-hook-label">🎣 钩子：</span>{{ res.hook }}
+                </div>
+                <div class="ai-result-golden" v-if="res.golden_sentences && res.golden_sentences.length">
+                  <span class="ai-golden-label">💬 金句：</span>
+                  <el-tag v-for="(g, gi) in res.golden_sentences" :key="gi" size="small" type="warning" style="margin-right:4px">{{ g }}</el-tag>
+                </div>
+                <div class="ai-result-visual" v-if="res.visual_notes && res.visual_notes.length">
+                  <span class="ai-visual-label">📷 画面：</span>
+                  <el-tag v-for="(v, vi) in res.visual_notes" :key="vi" size="small" type="success" style="margin-right:4px">{{ v }}</el-tag>
+                </div>
+                <div class="ai-result-tone" v-if="res.platform_tone">
+                  <span class="ai-tone-label">🎭 平台调性：</span>{{ res.platform_tone }}
+                </div>
+              </div>
+            </template>
+            <!-- 规则引擎：展示结构化内容 -->
+            <template v-else>
+              <div class="result-content-wrapper">
+                <div class="result-content-label">📝 裂变产出内容</div>
+                <div class="result-content-sections">
+                  <div v-for="(section, sidx) in parseFissionContent(res.output_content)" :key="sidx" class="result-section" :class="section.type">
+                    <div class="section-header" v-if="section.header"><span class="section-icon">{{ section.icon }}</span><span class="section-title-text">{{ section.header }}</span></div>
+                    <div class="section-body" v-if="section.lines.length">
+                      <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
+                        <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
+                        <span class="line-text">{{ line.text }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </template>
             <div class="result-actions">
               <el-button type="success" @click="saveAsMaterial(idx)" size="large">💾 保存为新素材</el-button>
               <el-button type="primary" @click="copyResult(idx)" size="large">📋 复制</el-button>
@@ -416,25 +466,68 @@
 
       <!-- 单结果 -->
       <template v-else-if="fissionResults.length === 1">
-        <div class="result-prediction">
-          <div class="prediction-item"><span class="prediction-label">预测 CTR</span><span class="prediction-value">{{ fissionResults[0].predicted_ctr }}</span></div>
-          <div class="prediction-divider"></div>
-          <div class="prediction-item"><span class="prediction-label">预测 ROI</span><span class="prediction-value prediction-highlight">{{ fissionResults[0].predicted_roi }}</span></div>
+        <!-- AI 匹配度 -->
+        <div class="result-match-score" v-if="fissionResults[0].is_ai">
+          <div class="match-score-badge" :class="matchScoreClass(fissionResults[0].match_score)">
+            <span class="match-score-num">{{ fissionResults[0].match_score }}</span>
+            <span class="match-score-label">匹配度</span>
+          </div>
+          <div class="match-score-reason">{{ fissionResults[0].match_reason }}</div>
         </div>
-        <div class="result-content-wrapper">
-          <div class="result-content-label">📝 裂变产出内容</div>
-          <div class="result-content-sections">
-            <div v-for="(section, sidx) in parseFissionContent(fissionResults[0].output_content)" :key="sidx" class="result-section" :class="section.type">
-              <div class="section-header" v-if="section.header"><span class="section-icon">{{ section.icon }}</span><span class="section-title-text">{{ section.header }}</span></div>
-              <div class="section-body" v-if="section.lines.length">
-                <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
-                  <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
-                  <span class="line-text">{{ line.text }}</span>
+        <div class="result-prediction">
+          <div class="prediction-item"><span class="prediction-label">预测 CTR</span><span class="prediction-value">{{ fissionResults[0].predicted_ctr || fissionResults[0].predicted_ctr_range }}</span></div>
+          <div class="prediction-divider"></div>
+          <div class="prediction-item"><span class="prediction-label">预测 ROI</span><span class="prediction-value prediction-highlight">{{ fissionResults[0].predicted_roi || fissionResults[0].predicted_roi_range }}</span></div>
+        </div>
+        <!-- AI 生成 -->
+        <template v-if="fissionResults[0].is_ai">
+          <div class="result-content-wrapper">
+            <div class="result-content-label">
+              📝 AI 生成文案
+              <el-tag size="small" type="warning" effect="plain" style="margin-left:8px">✨ AI</el-tag>
+            </div>
+            <div class="ai-result-title" v-if="fissionResults[0].title">
+              <span class="ai-title-label">标题：</span>
+              <span class="ai-title-text">{{ fissionResults[0].title }}</span>
+            </div>
+            <div class="ai-result-alt-titles" v-if="fissionResults[0].alt_titles && fissionResults[0].alt_titles.length">
+              <span class="ai-alt-label">备用标题：</span>
+              <span v-for="(t, ti) in fissionResults[0].alt_titles" :key="ti" class="ai-alt-title">{{ t }}</span>
+            </div>
+            <div class="ai-result-content">{{ fissionResults[0].content || fissionResults[0].output_content }}</div>
+            <div class="ai-result-hook" v-if="fissionResults[0].hook">
+              <span class="ai-hook-label">🎣 钩子：</span>{{ fissionResults[0].hook }}
+            </div>
+            <div class="ai-result-golden" v-if="fissionResults[0].golden_sentences && fissionResults[0].golden_sentences.length">
+              <span class="ai-golden-label">💬 金句：</span>
+              <el-tag v-for="(g, gi) in fissionResults[0].golden_sentences" :key="gi" size="small" type="warning" style="margin-right:4px">{{ g }}</el-tag>
+            </div>
+            <div class="ai-result-visual" v-if="fissionResults[0].visual_notes && fissionResults[0].visual_notes.length">
+              <span class="ai-visual-label">📷 画面：</span>
+              <el-tag v-for="(v, vi) in fissionResults[0].visual_notes" :key="vi" size="small" type="success" style="margin-right:4px">{{ v }}</el-tag>
+            </div>
+            <div class="ai-result-tone" v-if="fissionResults[0].platform_tone">
+              <span class="ai-tone-label">🎭 平台调性：</span>{{ fissionResults[0].platform_tone }}
+            </div>
+          </div>
+        </template>
+        <!-- 规则引擎 -->
+        <template v-else>
+          <div class="result-content-wrapper">
+            <div class="result-content-label">📝 裂变产出内容</div>
+            <div class="result-content-sections">
+              <div v-for="(section, sidx) in parseFissionContent(fissionResults[0].output_content)" :key="sidx" class="result-section" :class="section.type">
+                <div class="section-header" v-if="section.header"><span class="section-icon">{{ section.icon }}</span><span class="section-title-text">{{ section.header }}</span></div>
+                <div class="section-body" v-if="section.lines.length">
+                  <div v-for="(line, lidx) in section.lines" :key="lidx" class="section-line" :class="line.type">
+                    <span v-if="line.icon" class="line-icon">{{ line.icon }}</span>
+                    <span class="line-text">{{ line.text }}</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </template>
         <div class="result-actions">
           <el-button type="success" @click="saveAsMaterial(0)" size="large">💾 保存为新素材</el-button>
           <el-button type="primary" @click="copyResult(0)" size="large">📋 复制纯文本</el-button>
@@ -482,12 +575,13 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api, { getOptions, getFissionPresets, createFissionPreset, updateFissionPreset, deleteFissionPreset } from '../api'
+import api, { aiApi, getOptions, getFissionPresets, createFissionPreset, updateFissionPreset, deleteFissionPreset } from '../api'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+const aiGenerating = ref(false)
 const loadingOptions = ref(false)
 const loadingSkeleton = ref(false)
 const skeletons = ref([])
@@ -498,6 +592,7 @@ const fissionMode = ref('replace_leaf')
 const fissionResults = ref([])
 const activeResultTab = ref('0')
 const batchMode = ref(false)
+const aiVariantCount = ref(1)
 
 // 批量变体组
 const newEmptyGroup = () => ({
@@ -668,6 +763,67 @@ const validateFissionForm = () => {
   return warnings
 }
 
+// ============================================================
+// AI 裂变生成
+// ============================================================
+
+const canAiGenerate = computed(() => {
+  return selectedSkeleton.value && fissionForm.new_topic && fissionForm.new_topic.trim().length > 0
+})
+
+const matchScoreClass = (score) => {
+  if (!score) return ''
+  if (score >= 80) return 'score-high'
+  if (score >= 60) return 'score-medium'
+  return 'score-low'
+}
+
+const executeAiFission = async () => {
+  if (!selectedSkeleton.value) {
+    ElMessage.warning('请先选择骨架')
+    return
+  }
+  if (!fissionForm.new_topic || !fissionForm.new_topic.trim()) {
+    ElMessage.warning('请填写新主题')
+    return
+  }
+
+  aiGenerating.value = true
+  const loadingMsg = ElMessage.info({ message: 'AI 正在生成中，预计需要 15-45 秒...', duration: 0, showClose: true })
+  try {
+    const payload = {
+      skeleton_id: selectedSkeleton.value,
+      fission_mode: fissionMode.value,
+      new_topic: fissionForm.new_topic.trim(),
+      new_category: fissionForm.new_category || '',
+      new_platform: fissionForm.new_platform || '',
+      new_style: fissionForm.new_style || '',
+      replacement: {
+        L5: fissionForm.replacement.L5,
+        L4: fissionForm.replacement.L4,
+        L3: fissionMode.value === 'replace_branch' ? (fissionForm.replacement.L3 || []) : [],
+        L2: fissionMode.value === 'replace_style' ? (fissionForm.replacement.L2 || {}) : {},
+      },
+      variant_count: aiVariantCount.value,
+    }
+    const { data } = await aiApi.post('/fission/ai-generate', payload)
+    fissionResults.value = data.items || []
+    activeResultTab.value = '0'
+    loadingMsg.close()
+    const aiCount = fissionResults.value.filter(r => r.is_ai).length
+    const ruleCount = fissionResults.value.length - aiCount
+    if (ruleCount > 0) {
+      ElMessage.success(`已生成 ${fissionResults.value.length} 个变体（${aiCount} 个 AI + ${ruleCount} 个规则兜底）`)
+    } else {
+      ElMessage.success(`AI 生成完成，已产出 ${fissionResults.value.length} 个变体！`)
+    }
+  } catch (e) {
+    loadingMsg.close()
+    const errMsg = e.response?.data?.detail || e.message
+    ElMessage.error(`AI 裂变失败: ${errMsg}`)
+  }
+  aiGenerating.value = false
+}
 const executeFission = async () => {
   if (!fissionForm.skeleton_id) {
     ElMessage.warning('请先选择骨架')
@@ -1197,6 +1353,33 @@ onMounted(() => {
 .result-section.backup .section-title-text { color: #e6a700; }
 
 .result-actions { display: flex; gap: 12px; justify-content: center; padding-top: 16px; border-top: 1px solid #f0f0f0; }
+
+/* AI 匹配度 */
+.result-match-score { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px 16px; background: linear-gradient(135deg, #f5f7ff, #fff0f5); border-radius: 10px; border-left: 4px solid #667eea; }
+.match-score-badge { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; }
+.match-score-badge.score-high { background: linear-gradient(135deg, #43e97b, #38f9d7); color: #fff; }
+.match-score-badge.score-medium { background: linear-gradient(135deg, #f093fb, #f5576c); color: #fff; }
+.match-score-badge.score-low { background: linear-gradient(135deg, #fa709a, #fee140); color: #fff; }
+.match-score-num { font-size: 18px; font-weight: 700; line-height: 1; }
+.match-score-label { font-size: 10px; opacity: .9; margin-top: 2px; }
+.match-score-reason { font-size: 13px; color: #555; flex: 1; }
+
+/* AI 结果展示 */
+.ai-result-title { margin-bottom: 12px; padding: 10px 14px; background: #f0f4ff; border-radius: 8px; }
+.ai-title-label { font-size: 12px; color: #888; }
+.ai-title-text { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+.ai-result-alt-titles { margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ai-alt-label { font-size: 12px; color: #888; }
+.ai-alt-title { font-size: 13px; color: #667eea; background: #f0f4ff; padding: 2px 8px; border-radius: 4px; }
+.ai-result-content { white-space: pre-wrap; font-size: 14px; line-height: 1.8; color: #333; padding: 16px; background: #fafbfc; border-radius: 8px; border: 1px solid #eee; margin-bottom: 12px; }
+.ai-result-hook { margin-bottom: 8px; font-size: 13px; color: #555; }
+.ai-hook-label { font-weight: 600; color: #667eea; }
+.ai-result-golden { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ai-golden-label { font-size: 12px; color: #888; }
+.ai-result-visual { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ai-visual-label { font-size: 12px; color: #888; }
+.ai-result-tone { font-size: 13px; color: #777; font-style: italic; }
+.ai-tone-label { font-weight: 600; color: #764ba2; font-style: normal; }
 
 /* Batch mode */
 .batch-toggle { margin-top: 12px; padding: 10px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #f093fb; }

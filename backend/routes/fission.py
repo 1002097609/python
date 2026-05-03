@@ -431,3 +431,102 @@ def get_fission(fission_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Get fission {fission_id} failed: {e}", exc_info=True)
         return error(f"查询失败: {str(e)}", 500)
+
+
+# ============================================================
+# AI 裂变生成
+# ============================================================
+
+class AiFissionRequest(BaseModel):
+    """AI 裂变请求参数模型"""
+    skeleton_id: int
+    fission_mode: str  # replace_leaf / replace_branch / replace_style
+    new_topic: str
+    new_category: Optional[str] = ""
+    new_platform: Optional[str] = ""
+    new_style: Optional[str] = ""
+    replacement: Optional[dict] = None
+    variant_count: int = 1  # 生成变体数量 1-5
+
+
+@router.post("/ai-generate", status_code=201)
+def ai_generate_fission(data: AiFissionRequest, db: Session = Depends(get_db)):
+    """
+    AI 裂变生成接口。
+
+    根据骨架 L1-L5 结构化数据 + 新主题/品类/风格，调用 LongCat AI 端到端生成完整可投放文案。
+    AI 不可用时自动降级为规则引擎（fission_engine.generate_output）。
+
+    支持一次生成多个变体（variant_count），每个变体采用不同的表达风格。
+    """
+    try:
+        skeleton = db.query(Skeleton).filter(Skeleton.id == data.skeleton_id).first()
+        if not skeleton:
+            return error("骨架不存在", 404)
+
+        if not data.new_topic:
+            return error("新主题不能为空", 400)
+
+        # 构建骨架数据字典
+        skeleton_data = {
+            "id": skeleton.id,
+            "name": skeleton.name,
+            "skeleton_type": skeleton.skeleton_type,
+            "strategy_desc": skeleton.strategy_desc or "",
+            "structure_json": skeleton.structure_json or [],
+            "elements_json": skeleton.elements_json or {},
+            "avg_roi": float(skeleton.avg_roi) if skeleton.avg_roi else None,
+            "avg_ctr": float(skeleton.avg_ctr) if skeleton.avg_ctr else None,
+            "platform": skeleton.platform or "",
+        }
+
+        # 解析 JSON 字段（SQLite 可能返回字符串）
+        import json as _json
+        if isinstance(skeleton_data["structure_json"], str):
+            skeleton_data["structure_json"] = _json.loads(skeleton_data["structure_json"])
+        if isinstance(skeleton_data["elements_json"], str):
+            skeleton_data["elements_json"] = _json.loads(skeleton_data["elements_json"])
+
+        # 调用 AI 裂变引擎
+        from ..services.ai_fission import generate_fission
+        results = generate_fission(
+            skeleton=skeleton_data,
+            fission_mode=data.fission_mode,
+            new_topic=data.new_topic,
+            new_category=data.new_category or "",
+            new_platform=data.new_platform or "",
+            new_style=data.new_style or "",
+            replacement=data.replacement or {},
+            variant_count=data.variant_count,
+        )
+
+        # 构建响应
+        response_items = []
+        for r in results:
+            meta = r.get("_meta", {})
+            response_items.append({
+                "title": r.get("title", ""),
+                "alt_titles": r.get("alt_titles", []),
+                "content": r.get("content", ""),
+                "hook": r.get("hook", ""),
+                "golden_sentences": r.get("golden_sentences", []),
+                "visual_notes": r.get("visual_notes", []),
+                "tags": r.get("tags", []),
+                "match_score": meta.get("match_score"),
+                "match_reason": meta.get("match_reason", ""),
+                "predicted_ctr_range": meta.get("predicted_ctr_range", ""),
+                "predicted_roi_range": meta.get("predicted_roi_range", ""),
+                "platform_tone": meta.get("platform_tone", ""),
+                "is_ai": not meta.get("_fallback", False),
+            })
+
+        return created_response({
+            "count": len(response_items),
+            "items": response_items,
+            "skeleton_id": data.skeleton_id,
+            "fission_mode": data.fission_mode,
+            "new_topic": data.new_topic,
+        })
+    except Exception as e:
+        logger.error(f"AI fission generate failed: {e}", exc_info=True)
+        return error(f"AI 裂变生成失败: {str(e)}", 500)
