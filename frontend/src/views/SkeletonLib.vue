@@ -51,6 +51,10 @@
             <el-option label="平均 CTR" value="avg_ctr" />
             <el-option label="创建时间" value="created_at" />
           </el-select>
+          <el-radio-group v-model="viewMode" size="small">
+            <el-radio-button label="card">卡片</el-radio-button>
+            <el-radio-button label="table">表格</el-radio-button>
+          </el-radio-group>
           <el-button size="small" @click="triggerImportSkeleton">📥 导入</el-button>
           <el-dropdown size="small" @command="handleExportSkeleton">
             <el-button size="small">📤 导出 ▾</el-button>
@@ -75,7 +79,8 @@
         <div class="empty-hint">在「素材拆解」页面完成拆解并提取骨架后，骨架会自动出现在这里</div>
       </div>
 
-      <el-row :gutter="16" v-else>
+      <!-- 卡片视图 -->
+      <el-row :gutter="16" v-else-if="viewMode === 'card'">
         <el-col :span="8" v-for="sk in skeletons" :key="sk.id">
           <div class="skeleton-card" @click="viewDetail(sk)">
             <div class="sk-header">
@@ -108,6 +113,56 @@
           </div>
         </el-col>
       </el-row>
+
+      <!-- 表格视图（快速对比） -->
+      <el-table v-else :data="skeletons" stripe size="default" @row-click="(row) => viewDetail(row)">
+        <el-table-column prop="name" label="骨架名称" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span style="font-weight:600">{{ row.name }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="skeleton_type" label="类型" width="120">
+          <template #default="{ row }">
+            <el-tag size="small" type="success" effect="plain">{{ row.skeleton_type || '—' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="platform" label="平台" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.platform" size="small" type="primary" effect="plain">{{ row.platform }}</el-tag>
+            <span v-else style="color:#ccc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="usage_count" label="使用次数" width="100" sortable align="center">
+          <template #default="{ row }">
+            <strong style="color:#667eea">{{ row.usage_count || 0 }}</strong>
+          </template>
+        </el-table-column>
+        <el-table-column prop="avg_roi" label="平均 ROI" width="110" sortable align="center">
+          <template #default="{ row }">
+            <span v-if="row.avg_roi" style="color:#27ae60;font-weight:600">{{ Number(row.avg_roi).toFixed(1) }}x</span>
+            <span v-else style="color:#ccc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="avg_ctr" label="平均 CTR" width="110" sortable align="center">
+          <template #default="{ row }">
+            <span v-if="row.avg_ctr" style="color:#f39c12;font-weight:600">{{ Number(row.avg_ctr).toFixed(1) }}%</span>
+            <span v-else style="color:#ccc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="120">
+          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" align="center">
+          <template #default="{ row }">
+            <div @click.stop>
+              <el-button type="success" link size="small" @click="goDetail(row)">📊 详情</el-button>
+              <el-button type="primary" link size="small" @click="goFission(row)">裂变</el-button>
+              <el-button type="info" link size="small" @click="openEditDialog(row)">编辑</el-button>
+              <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
 
       <!-- 分页 -->
       <div class="pagination-wrap" v-if="totalCount > pageSize">
@@ -273,20 +328,20 @@
           <div ref="trendChartRef" class="trend-chart"></div>
           <el-table :data="trendEffects" size="small" stripe style="margin-top:12px">
             <el-table-column prop="stat_date" label="日期" width="110" />
-            <el-table-column prop="platform" label="平台" width="90" />
-            <el-table-column prop="impressions" label="曝光" width="90" />
-            <el-table-column prop="clicks" label="点击" width="80" />
-            <el-table-column label="CTR" width="80">
+            <el-table-column label="CTR" width="90">
               <template #default="{ row }">{{ row.ctr ? row.ctr + '%' : '—' }}</template>
             </el-table-column>
-            <el-table-column label="ROI" width="80">
+            <el-table-column label="ROI" width="90">
               <template #default="{ row }">{{ row.roi ? row.roi + 'x' : '—' }}</template>
             </el-table-column>
-            <el-table-column label="花费" width="90">
-              <template #default="{ row }">{{ row.cost ? '¥' + row.cost : '—' }}</template>
+            <el-table-column label="花费" width="100">
+              <template #default="{ row }">{{ row.cost ? '¥' + row.cost.toLocaleString() : '—' }}</template>
             </el-table-column>
-            <el-table-column label="收入" width="90">
-              <template #default="{ row }">{{ row.revenue ? '¥' + row.revenue : '—' }}</template>
+            <el-table-column label="收入" width="100">
+              <template #default="{ row }">{{ row.revenue ? '¥' + row.revenue.toLocaleString() : '—' }}</template>
+            </el-table-column>
+            <el-table-column label="数据点" width="80" align="center">
+              <template #default="{ row }">{{ row.count || 1 }}</template>
             </el-table-column>
           </el-table>
         </div>
@@ -301,7 +356,7 @@ import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
-import api, { importSkeletons, exportSkeletons, getFissionEffects } from '../api'
+import api, { importSkeletons, exportSkeletons } from '../api'
 
 const router = useRouter()
 const route = useRoute()
@@ -312,6 +367,7 @@ const filterType = ref('')
 const filterPlatform = ref('')
 const sortBy = ref('usage_count')
 const searchKeyword = ref('')
+const viewMode = ref('card')
 const page = ref(1)
 const pageSize = ref(12)
 const totalCount = ref(0)
@@ -533,19 +589,18 @@ const openTrendDialog = async (sk) => {
   trendSkeleton.value = sk
   trendEffects.value = []
   trendDialogVisible.value = true
-  // 加载该骨架关联的所有裂变记录的效果数据
+  // 使用聚合接口一次性加载所有效果数据
   try {
-    const { data } = await api.get('/fission/', { params: { skeleton_id: sk.id, page_size: 100 } })
-    const fissions = Array.isArray(data) ? data : (data.items || [])
-    const allEffects = []
-    for (const f of fissions) {
-      try {
-        const effs = await getFissionEffects(f.id)
-        allEffects.push(...effs)
-      } catch { /* skip */ }
-    }
-    allEffects.sort((a, b) => (a.stat_date || '').localeCompare(b.stat_date || ''))
-    trendEffects.value = allEffects
+    const { data } = await api.get(`/skeleton/${sk.id}/effects`)
+    const trend = data.trend || []
+    trendEffects.value = trend.map(t => ({
+      stat_date: t.date,
+      roi: t.avg_roi,
+      ctr: t.avg_ctr,
+      cost: t.total_cost,
+      revenue: t.total_revenue,
+      count: t.count,
+    }))
     await nextTick()
     initTrendChart()
   } catch (e) {
@@ -557,9 +612,10 @@ function initTrendChart() {
   if (!trendChartRef.value || trendEffects.value.length === 0) return
   if (trendChart) { trendChart.dispose(); trendChart = null }
   trendChart = echarts.init(trendChartRef.value)
-  const dates = trendEffects.value.map(e => e.stat_date)
-  const roiData = trendEffects.value.map(e => e.roi)
-  const ctrData = trendEffects.value.map(e => e.ctr)
+  const sorted = [...trendEffects.value].filter(e => e.stat_date).sort((a, b) => a.stat_date.localeCompare(b.stat_date))
+  const dates = sorted.map(e => (e.stat_date || '').slice(5))
+  const roiData = sorted.map(e => e.roi ?? null)
+  const ctrData = sorted.map(e => e.ctr ?? null)
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['ROI', 'CTR'], top: 0 },

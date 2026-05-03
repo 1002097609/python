@@ -192,6 +192,106 @@ def delete_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
             material.status = 0
 
 
+@router.get("/{skeleton_id}/effects")
+def get_skeleton_effects(skeleton_id: int, db: Session = Depends(get_db)):
+    """
+    聚合查询指定骨架所有裂变记录的效果数据。
+
+    返回该骨架下所有裂变记录的效果数据汇总，按日期聚合，
+    用于骨架详情页效果趋势图和裂变对比表。
+
+    返回值:
+        dict: {
+            "trend": [{date, avg_roi, avg_ctr, total_cost, total_revenue, count}],
+            "fissions": [{id, fission_mode, new_topic, output_status, predicted_ctr, predicted_roi,
+                          effect_summary: {roi, ctr, cost, revenue}, created_at}]
+        }
+    """
+    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+    if not skeleton:
+        raise HTTPException(status_code=404, detail="骨架不存在")
+
+    from ..models.fission import Fission
+    from ..models.effect_data import EffectData
+    from sqlalchemy import func
+
+    # 获取该骨架的所有裂变记录
+    fissions = db.query(Fission).filter(Fission.skeleton_id == skeleton_id).all()
+
+    # 批量获取所有效果数据（一次查询）
+    fission_ids = [f.id for f in fissions]
+    effects = []
+    if fission_ids:
+        effects = db.query(EffectData).filter(EffectData.fission_id.in_(fission_ids)).all()
+
+    # 按 fission_id 分组效果数据
+    effects_by_fission = {}
+    for e in effects:
+        effects_by_fission.setdefault(e.fission_id, []).append(e)
+
+    # 组装裂变记录 + 效果汇总
+    fission_results = []
+    all_effects_for_trend = []
+    for f in fissions:
+        eff_arr = effects_by_fission.get(f.id, [])
+        summary = None
+        if eff_arr:
+            total_cost = sum(e.cost or 0 for e in eff_arr)
+            total_revenue = sum(e.revenue or 0 for e in eff_arr)
+            avg_roi = sum(e.roi or 0 for e in eff_arr) / len(eff_arr)
+            avg_ctr = sum(e.ctr or 0 for e in eff_arr) / len(eff_arr)
+            summary = {
+                "roi": round(float(avg_roi), 2),
+                "ctr": round(float(avg_ctr), 2),
+                "cost": round(float(total_cost), 2),
+                "revenue": round(float(total_revenue), 2),
+            }
+            all_effects_for_trend.extend(eff_arr)
+
+        fission_results.append({
+            "id": f.id,
+            "fission_mode": f.fission_mode,
+            "new_topic": f.new_topic,
+            "new_category": f.new_category,
+            "output_status": f.output_status,
+            "predicted_ctr": f.predicted_ctr,
+            "predicted_roi": f.predicted_roi,
+            "effect_summary": summary,
+            "created_at": str(f.created_at) if f.created_at else None,
+        })
+
+    # 按日期聚合趋势数据
+    date_map = {}
+    for e in all_effects_for_trend:
+        d = str(e.stat_date) if e.stat_date else ""
+        if not d:
+            continue
+        if d not in date_map:
+            date_map[d] = {"rois": [], "ctrs": [], "costs": [], "revenues": []}
+        if e.roi is not None:
+            date_map[d]["rois"].append(float(e.roi))
+        if e.ctr is not None:
+            date_map[d]["ctrs"].append(float(e.ctr))
+        if e.cost is not None:
+            date_map[d]["costs"].append(float(e.cost))
+        if e.revenue is not None:
+            date_map[d]["revenues"].append(float(e.revenue))
+
+    trend = []
+    for d in sorted(date_map.keys()):
+        entry = date_map[d]
+        trend.append({
+            "date": d,
+            "avg_roi": round(sum(entry["rois"]) / len(entry["rois"]), 2) if entry["rois"] else None,
+            "avg_ctr": round(sum(entry["ctrs"]) / len(entry["ctrs"]), 2) if entry["ctrs"] else None,
+            "total_cost": round(sum(entry["costs"]), 2),
+            "total_revenue": round(sum(entry["revenues"]), 2),
+            "count": len(entry["rois"]),
+        })
+
+    return {"trend": trend, "fissions": fission_results}
+
+
 @router.post("/from-dismantle/{dismantle_id}")
 def create_skeleton_from_dismantle(dismantle_id: int, db: Session = Depends(get_db)):
     """

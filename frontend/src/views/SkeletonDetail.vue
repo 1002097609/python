@@ -193,38 +193,16 @@ async function fetchData() {
     const { data: sk } = await api.get(`/skeleton/${skeletonId}`)
     skeleton.value = sk
 
-    // 加载裂变记录
-    const { data: fissionsRes } = await api.get('/fission/', { params: { skeleton_id: skeletonId, page_size: 100 } })
-    const fissions = Array.isArray(fissionsRes) ? fissionsRes : (fissionsRes.items || [])
-
-    // 加载每条裂变的效果数据
-    const withEffects = []
-    const allEffects = []
-    for (const f of fissions) {
-      try {
-        const { data: effects } = await api.get(`/fission/${f.id}/effects`)
-        const effArr = Array.isArray(effects) ? effects : []
-        let summary = null
-        if (effArr.length > 0) {
-          const totalCost = effArr.reduce((s, e) => s + (e.cost || 0), 0)
-          const totalRevenue = effArr.reduce((s, e) => s + (e.revenue || 0), 0)
-          const avgRoi = effArr.reduce((s, e) => s + (e.roi || 0), 0) / effArr.length
-          const avgCtr = effArr.reduce((s, e) => s + (e.ctr || 0), 0) / effArr.length
-          summary = {
-            roi: Number(avgRoi.toFixed(2)),
-            ctr: Number(avgCtr.toFixed(2)),
-            cost: Number(totalCost.toFixed(2)),
-            revenue: Number(totalRevenue.toFixed(2)),
-          }
-          allEffects.push(...effArr.map(e => ({ ...e, fission_id: f.id, fission_mode: f.fission_mode, new_topic: f.new_topic })))
-        }
-        withEffects.push({ ...f, effect_summary: summary })
-      } catch {
-        withEffects.push({ ...f, effect_summary: null })
-      }
-    }
-    fissionList.value = withEffects
-    effectList.value = allEffects.sort((a, b) => (a.stat_date || '').localeCompare(b.stat_date || ''))
+    // 一次性加载所有裂变记录 + 效果数据（后端聚合，替代前端 N+1 查询）
+    const { data: agg } = await api.get(`/skeleton/${skeletonId}/effects`)
+    fissionList.value = agg.fissions || []
+    effectList.value = (agg.trend || []).map(t => ({
+      stat_date: t.date,
+      roi: t.avg_roi,
+      ctr: t.avg_ctr,
+      cost: t.total_cost,
+      revenue: t.total_revenue,
+    }))
 
     await nextTick()
     initTrendChart()
@@ -239,25 +217,12 @@ function initTrendChart() {
   if (trendChart) { trendChart.dispose(); trendChart = null }
   trendChart = echarts.init(trendChartRef.value)
 
-  // 按日期聚合效果数据
-  const dateMap = {}
-  for (const e of effectList.value) {
-    const d = e.stat_date
-    if (!dateMap[d]) dateMap[d] = { rois: [], ctrs: [] }
-    if (e.roi) dateMap[d].rois.push(e.roi)
-    if (e.ctr) dateMap[d].ctrs.push(e.ctr)
-  }
-  const dates = Object.keys(dateMap).sort()
-  const roiData = dates.map(d => {
-    const arr = dateMap[d].rois
-    return arr.length ? Number((arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(2)) : null
-  })
-  const ctrData = dates.map(d => {
-    const arr = dateMap[d].ctrs
-    return arr.length ? Number((arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(2)) : null
-  })
+  // effectList 已经是按日期聚合的后端数据
+  const sorted = [...effectList.value].sort((a, b) => (a.stat_date || '').localeCompare(b.stat_date || ''))
+  const displayDates = sorted.map(e => (e.stat_date || '').slice(5))
+  const roiData = sorted.map(e => e.roi ?? null)
+  const ctrData = sorted.map(e => e.ctr ?? null)
 
-  const displayDates = dates.map(d => d.slice(5))
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['ROI', 'CTR'], top: 0 },
