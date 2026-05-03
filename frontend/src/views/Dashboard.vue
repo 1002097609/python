@@ -264,7 +264,7 @@ function drillFissionByStatus(status) {
 
 function onSkeletonRowClick(row) {
   if (row && row.id) {
-    router.push({ path: '/skeleton-lib', query: { skeleton_id: String(row.id) } })
+    router.push({ path: `/skeleton-detail/${row.id}` })
   }
 }
 

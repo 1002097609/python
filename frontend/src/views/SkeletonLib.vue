@@ -99,7 +99,7 @@
             <div class="sk-footer">
               <span class="sk-date">{{ formatDate(sk.created_at) }}</span>
               <div class="sk-actions" @click.stop>
-                <el-button type="success" link size="small" @click="openTrendDialog(sk)">📊 趋势</el-button>
+                <el-button type="success" link size="small" @click="goDetail(sk)">📊 评分详情</el-button>
                 <el-button type="info" link size="small" @click="openEditDialog(sk)">编辑</el-button>
                 <el-button type="primary" link size="small" @click="goFission(sk)">去裂变 →</el-button>
                 <el-button type="danger" link size="small" @click="handleDelete(sk)">删除</el-button>
@@ -409,6 +409,10 @@ const goFission = (sk) => {
   router.push({ path: '/fission', query: { skeleton_id: sk.id } })
 }
 
+const goDetail = (sk) => {
+  router.push({ path: `/skeleton-detail/${sk.id}` })
+}
+
 const goFissionFromDetail = () => {
   detailVisible.value = false
   goFission(currentSkeleton.value)
@@ -585,8 +589,9 @@ onMounted(async () => {
   // 从 URL 查询参数恢复筛选状态（Dashboard 图表下钻导航）
   const { skeleton_id } = route.query
   if (skeleton_id) {
-    const sk = allSkeletons.value.find(s => s.id === Number(skeleton_id))
-    if (sk) viewDetail(sk)
+    // 导航到独立详情页
+    router.replace({ path: `/skeleton-detail/${skeleton_id}` })
+    return
   }
 })
 </script>

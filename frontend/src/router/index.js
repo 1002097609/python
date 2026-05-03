@@ -9,6 +9,7 @@ import TagManage from '../views/TagManage.vue'
 import Dashboard from '../views/Dashboard.vue'
 import OperationLog from '../views/OperationLog.vue'
 import PresetManage from '../views/PresetManage.vue'
+import SkeletonDetail from '../views/SkeletonDetail.vue'
 
 const routes = [
   { path: '/', name: 'Dismantle', component: Dismantle, meta: { title: '素材拆解' } },
@@ -21,6 +22,7 @@ const routes = [
   { path: '/tag-manage', name: 'TagManage', component: TagManage, meta: { title: '标签管理' } },
   { path: '/operation-log', name: 'OperationLog', component: OperationLog, meta: { title: '操作日志' } },
   { path: '/preset-manage', name: 'PresetManage', component: PresetManage, meta: { title: '预设管理' } },
+  { path: '/skeleton-detail/:id', name: 'SkeletonDetail', component: SkeletonDetail, meta: { title: '骨架评分详情' } },
 ]
 
 const router = createRouter({
