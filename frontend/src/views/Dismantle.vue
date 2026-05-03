@@ -522,6 +522,7 @@ const runAiAnalyze = async () => {
   }
 
   aiAnalyzing.value = true
+  const loadingMsg = ElMessage.info({ message: 'AI 正在分析中，预计需要 10-30 秒...', duration: 0, showClose: true })
   try {
     const { data } = await aiApi.post('/dismantle/ai-analyze', {
       title: title.trim(),
@@ -574,6 +575,7 @@ const runAiAnalyze = async () => {
     if (meta.detected_category) infoParts.push(`检测品类：${meta.detected_category}`)
     const infoStr = infoParts.length ? `（${infoParts.join(' / ')}）` : ''
 
+    loadingMsg.close()
     ElMessage.success(`AI 拆解完成${infoStr}，请检查并修正后保存`)
 
     // 如果当前不是编辑模式，自动进入编辑模式
@@ -581,6 +583,7 @@ const runAiAnalyze = async () => {
       editMode.value = true
     }
   } catch (e) {
+    loadingMsg.close()
     const errMsg = e.response?.data?.detail || e.message
     ElMessage.error(`AI 拆解失败: ${errMsg}`)
   }

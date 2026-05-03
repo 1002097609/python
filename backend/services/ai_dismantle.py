@@ -9,13 +9,39 @@ AI 辅助拆解服务（services/ai_dismantle.py）。
 """
 
 import json
-import os
+import hashlib
 import logging
+import os
 from typing import Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# ============================================================
+# AI 响应缓存（进程内 LRU）
+# ============================================================
+
+_ai_cache: dict = {}
+_ai_cache_max_size = 128
+
+
+def _cache_key(title: str, content: str, platform: str, category: str) -> str:
+    """根据输入参数生成缓存 key"""
+    raw = f"{title}|{content}|{platform}|{category}"
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()
+
+
+def _get_cached(key: str) -> Optional[dict]:
+    """从缓存获取结果"""
+    return _ai_cache.get(key)
+
+
+def _set_cache(key: str, value: dict):
+    """写入缓存，超出容量时清空（简单淘汰策略）"""
+    if len(_ai_cache) >= _ai_cache_max_size:
+        _ai_cache.clear()
+    _ai_cache[key] = value
 
 # ============================================================
 # LongCat API 配置
@@ -277,6 +303,13 @@ def analyze_material(title: str, content: str, platform: str = "", category: str
     返回：
         dict: L1-L5 拆解数据，格式与 DismantleCreate 一致
     """
+    # 检查缓存
+    key = _cache_key(title, content, platform, category)
+    cached = _get_cached(key)
+    if cached:
+        logger.info("AI 拆解命中缓存")
+        return cached
+
     # 优先调用 LongCat AI
     ai_result = _call_longcat(title, content, platform, category)
     if ai_result:
@@ -286,8 +319,11 @@ def analyze_material(title: str, content: str, platform: str = "", category: str
         ai_result["_meta"]["platform"] = platform
         if not ai_result["_meta"].get("detected_category"):
             ai_result["_meta"]["detected_category"] = category or "通用"
+        _set_cache(key, ai_result)
         return ai_result
 
     # 降级：规则引擎
     logger.info("使用规则引擎兜底拆解")
-    return _rule_based_analyze(title, content, platform, category)
+    result = _rule_based_analyze(title, content, platform, category)
+    _set_cache(key, result)
+    return result

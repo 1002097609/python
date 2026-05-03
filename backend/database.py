@@ -24,6 +24,7 @@ DB_PORT = os.getenv("DB_PORT", "3306")             # 数据库端口，MySQL 默
 DB_USER = os.getenv("DB_USER", "root")             # 数据库用户名
 DB_PASSWORD = os.getenv("DB_PASSWORD", "root")     # 数据库密码
 DB_NAME = os.getenv("DB_NAME", "material_system")  # 数据库名称
+DB_ECHO = os.getenv("DB_ECHO", "true").lower() in ("true", "1", "yes")  # 是否打印 SQL
 
 # 组装 MySQL 连接 URL，使用 pymysql 驱动，字符集设为 utf8mb4 支持 emoji
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
@@ -31,7 +32,7 @@ DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB
 # 创建 SQLAlchemy 引擎
 # echo=True 表示在控制台输出 SQL 语句（调试用，生产环境建议关闭）
 # pool_pre_ping=True 表示连接池在使用前先检测连接是否存活，防止连接断开导致报错
-engine = create_engine(DATABASE_URL, echo=True, pool_pre_ping=True)
+engine = create_engine(DATABASE_URL, echo=DB_ECHO, pool_pre_ping=True)
 
 # 创建会话工厂
 # autocommit=False 表示不自动提交，需手动调用 commit()

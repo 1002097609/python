@@ -46,7 +46,7 @@ class Skeleton(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # 骨架名称，如"测评对比型"、"红黑榜型"、"闺蜜分享型"等
-    name = Column(String(100), nullable=False, comment="骨架名称：测评对比型/红黑榜型...")
+    name = Column(String(100), nullable=False, index=True, comment="骨架名称：测评对比型/红黑榜型...")
 
     # 骨架分类标签，用于归类筛选
     skeleton_type = Column(String(50), comment="骨架类型")

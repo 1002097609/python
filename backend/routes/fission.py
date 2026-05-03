@@ -261,14 +261,21 @@ def list_fissions(
     total = query.count()
     items = query.order_by(Fission.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
+    # 批量查询关联骨架，避免 N+1 查询
+    skeleton_ids = [item.skeleton_id for item in items]
+    skeletons = {}
+    if skeleton_ids:
+        for s in db.query(Skeleton).filter(Skeleton.id.in_(skeleton_ids)).all():
+            skeletons[s.id] = s
+
     # 组装返回数据，附带骨架名称便于前端展示
     result = []
     for item in items:
-        skeleton = db.query(Skeleton).filter(Skeleton.id == item.skeleton_id).first()
+        sk = skeletons.get(item.skeleton_id)
         result.append({
             "id": item.id,
             "skeleton_id": item.skeleton_id,
-            "skeleton_name": skeleton.name if skeleton else "未知骨架",
+            "skeleton_name": sk.name if sk else "未知骨架",
             "fission_mode": item.fission_mode,
             "new_topic": item.new_topic,
             "output_title": item.output_title,

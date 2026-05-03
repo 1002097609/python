@@ -90,7 +90,8 @@ class EffectData(Base):
     # 唯一约束 + 索引
     __table_args__ = (
         UniqueConstraint("fission_id", "stat_date", "platform", name="uk_effect_fission_date_platform"),
-        Index("idx_effect_material", "material_id"),  # 查询某原始素材的所有效果数据
-        Index("idx_effect_fission", "fission_id"),    # 查询某裂变素材的所有效果数据
-        Index("idx_effect_date", "stat_date"),         # 按日期范围查询（如近7天数据）
+        Index("idx_effect_material", "material_id"),              # 查询某原始素材的所有效果数据
+        Index("idx_effect_fission", "fission_id"),                # 查询某裂变素材的所有效果数据
+        Index("idx_effect_fission_date", "fission_id", "stat_date"),  # 按裂变+日期范围查询
+        Index("idx_effect_date", "stat_date"),                     # 按日期范围查询（如近7天数据）
     )

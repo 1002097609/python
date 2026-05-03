@@ -39,8 +39,8 @@ class Material(Base):
     # 自增主键
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # 素材标题，最多 200 字符，非空
-    title = Column(String(200), nullable=False, comment="素材标题")
+    # 素材标题，最多 200 字符，非空，添加索引加速关键词搜索
+    title = Column(String(200), nullable=False, index=True, comment="素材标题")
 
     # 原始素材内容（脚本/文案等），Text 类型支持长文本
     content = Column(Text, nullable=False, comment="原始素材内容")
@@ -71,7 +71,9 @@ class Material(Base):
 
     # 建立复合索引，加速按平台、品类、状态的查询
     __table_args__ = (
-        Index("idx_platform", "platform"),   # 按平台筛选
-        Index("idx_category", "category"),   # 按品类筛选
-        Index("idx_status", "status"),       # 按拆分状态筛选
+        Index("idx_platform", "platform"),          # 按平台筛选
+        Index("idx_category", "category"),          # 按品类筛选
+        Index("idx_status", "status"),              # 按状态筛选
+        Index("idx_platform_category", "platform", "category"),  # 平台+品类组合筛选
+        Index("idx_created_at", "created_at"),      # 按创建时间排序
     )
