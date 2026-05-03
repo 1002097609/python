@@ -92,6 +92,44 @@
       </div>
     </div>
 
+    <!-- 骨架推荐面板 -->
+    <div class="card skeleton-recommend-panel" v-if="recommendedSkeletons.length > 0">
+      <div class="card-toolbar">
+        <div class="toolbar-left">
+          <span class="dot"></span>
+          <span class="card-title">🦴 推荐骨架 — 基于当前拆解结果匹配</span>
+          <el-tag size="small" type="primary" effect="plain">AI 推荐</el-tag>
+        </div>
+        <el-button type="info" link size="small" @click="fetchRecommendedSkeletons" :loading="loadingRecommend">🔄 刷新推荐</el-button>
+      </div>
+      <div class="recommend-list">
+        <div v-for="sk in recommendedSkeletons" :key="sk.id" class="recommend-item" @click="goToFissionWithSkeleton(sk.id)">
+          <div class="recommend-main">
+            <div class="recommend-header">
+              <span class="recommend-name">{{ sk.name }}</span>
+              <span class="recommend-type" v-if="sk.skeleton_type">{{ sk.skeleton_type }}</span>
+              <span class="match-badge" :class="matchLevelClass(sk.match_level)">
+                <span class="match-score">{{ sk.match_score }}</span>
+                <span class="match-label">{{ matchLevelLabel(sk.match_level) }}</span>
+              </span>
+            </div>
+            <div class="recommend-reasons" v-if="sk.match_reasons && sk.match_reasons.length">
+              <el-tag v-for="(reason, ri) in sk.match_reasons" :key="ri" size="small" type="success" effect="plain" class="reason-tag">{{ reason }}</el-tag>
+            </div>
+            <div class="recommend-meta">
+              <span v-if="sk.platform">📱 {{ sk.platform }}</span>
+              <span v-if="sk.avg_roi">💰 ROI {{ Number(sk.avg_roi).toFixed(1) }}x</span>
+              <span v-if="sk.avg_ctr">📈 CTR {{ Number(sk.avg_ctr).toFixed(1) }}%</span>
+              <span v-if="sk.usage_count">🔄 已使用 {{ sk.usage_count }} 次</span>
+            </div>
+          </div>
+          <div class="recommend-action">
+            <el-button type="primary" size="small">⚡ 用此骨架裂变</el-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 编辑模式：五层拆解表单 -->
     <div class="card" v-if="editMode || (!existingDismantle && currentMaterial)">
       <div class="step-block">
@@ -370,6 +408,50 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api, { aiApi, getOptions, getDismantleByMaterial, createDismantle, updateDismantle } from '../api'
+
+
+// ============================================================
+// 骨架推荐
+// ============================================================
+
+const recommendedSkeletons = ref([])
+const loadingRecommend = ref(false)
+
+const matchLevelClass = (level) => {
+  return { high: 'match-high', medium: 'match-medium', low: 'match-low' }[level] || ''
+}
+const matchLevelLabel = (level) => {
+  return { high: '高度匹配', medium: '中度匹配', low: '低度匹配' }[level] || ''
+}
+
+const fetchRecommendedSkeletons = async () => {
+  if (!existingDismantle.value) return
+  loadingRecommend.value = true
+  try {
+    const d = existingDismantle.value
+    const { data } = await api.post('/skeleton/recommend', {
+      l1_topic: d.l1_topic || '',
+      l1_core_point: d.l1_core_point || '',
+      l2_strategy: d.l2_strategy || [],
+      l2_emotion: d.l2_emotion || '',
+      l3_structure: d.l3_structure || [],
+      l4_elements: d.l4_elements || {},
+      category: currentMaterial.value?.category || '',
+      platform: currentMaterial.value?.platform || '',
+      limit: 5,
+    })
+    recommendedSkeletons.value = data.items || []
+  } catch (e) {
+    console.error('骨架推荐失败', e)
+    recommendedSkeletons.value = []
+  }
+  loadingRecommend.value = false
+}
+
+const goToFissionWithSkeleton = (skeletonId) => {
+  router.push({ path: '/fission', query: { skeleton_id: skeletonId } })
+}
+
 
 const route = useRoute()
 const router = useRouter()
@@ -843,6 +925,8 @@ const extractSkeleton = async () => {
   extracting.value = true
   try {
     await api.post(`/skeleton/from-dismantle/${existingDismantle.value.id}`)
+    // 自动获取推荐骨架
+    await fetchRecommendedSkeletons()
     ElMessage.success('骨架提取成功！')
   } catch (e) {
     if (e.response?.status === 409) {
@@ -1058,4 +1142,24 @@ const removeSection = (idx) => {
   .view-row { flex-direction: column; gap: 4px; }
   .view-label { padding-top: 0; }
 }
+
+/* 骨架推荐面板 */
+.skeleton-recommend-panel { border: 2px solid #667eea; }
+.recommend-list { display: flex; flex-direction: column; gap: 10px; }
+.recommend-item { display: flex; align-items: center; gap: 16px; padding: 14px 18px; background: #fafbff; border-radius: 10px; border: 1px solid #e8ecff; cursor: pointer; transition: all .2s; }
+.recommend-item:hover { background: #f0f3ff; border-color: #667eea; box-shadow: 0 2px 8px rgba(102,126,234,.15); transform: translateY(-1px); }
+.recommend-main { flex: 1; min-width: 0; }
+.recommend-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.recommend-name { font-size: 14px; font-weight: 600; color: #1a1a2e; }
+.recommend-type { font-size: 12px; color: #667eea; background: #e8ecff; padding: 1px 8px; border-radius: 4px; }
+.match-badge { display: flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.match-badge.match-high { background: linear-gradient(135deg, #43e97b, #38f9d7); color: #fff; }
+.match-badge.match-medium { background: linear-gradient(135deg, #f093fb, #f5576c); color: #fff; }
+.match-badge.match-low { background: linear-gradient(135deg, #fa709a, #fee140); color: #fff; }
+.match-score { font-size: 14px; }
+.match-label { font-size: 11px; opacity: .9; }
+.recommend-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.reason-tag { font-size: 11px; }
+.recommend-meta { display: flex; gap: 12px; font-size: 12px; color: #888; flex-wrap: wrap; }
+.recommend-action { flex-shrink: 0; }
 </style>

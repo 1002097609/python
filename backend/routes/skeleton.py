@@ -350,6 +350,200 @@ def _extract_style_tags(l4_elements) -> list:
     tags = []
     for key in ("hook", "title_formula", "transition", "interaction"):
         val = elements.get(key, "")
+        if val and isinstance(val, str) and len(val) >= 2:
+            tags.append(val)
+    return tags
+
+
+# ============================================================
+# 骨架自动推荐
+# ============================================================
+
+from pydantic import BaseModel
+from typing import Optional
+
+
+class SkeletonRecommendRequest(BaseModel):
+    """骨架推荐请求模型 — 传入拆解记录的 L1-L5 数据"""
+    l1_topic: Optional[str] = None
+    l1_core_point: Optional[str] = None
+    l2_strategy: Optional[list] = None
+    l2_emotion: Optional[str] = None
+    l3_structure: Optional[list] = None
+    l4_elements: Optional[dict] = None
+    category: Optional[str] = None
+    platform: Optional[str] = None
+    limit: int = 5
+
+
+@router.post("/recommend")
+def recommend_skeletons(data: SkeletonRecommendRequest, db: Session = Depends(get_db)):
+    """
+    骨架自动推荐接口。
+
+    根据传入的拆解数据（L1-L5），从骨架库中匹配最适合用于裂变的骨架。
+
+    匹配算法：
+      1. L2 策略标签匹配（权重 35%）— 策略标签重合度
+      2. L3 结构类型匹配（权重 30%）— 骨架类型 + 段落结构相似度
+      3. 品类匹配（权重 15%）— 同品类优先
+      4. 平台匹配（权重 10%）— 同平台优先
+      5. 效果加成（权重 10%）— avg_roi / avg_ctr 历史效果
+
+    返回 Top N 推荐骨架 + 匹配分数 + 匹配原因。
+    """
+    try:
+        # 解析拆解数据
+        dismantle_strategies = set(s.strip() for s in (data.l2_strategy or []) if s and s.strip())
+        dismantle_emotion = (data.l2_emotion or "").strip()
+        dismantle_category = (data.category or "").strip()
+        dismantle_platform = (data.platform or "").strip()
+        dismantle_topic = (data.l1_topic or "").strip()
+
+        # 解析 L3 结构类型
+        l3_structure = data.l3_structure or []
+        if isinstance(l3_structure, str):
+            import json
+            l3_structure = json.loads(l3_structure)
+        section_names = [s.get("name", "") for s in l3_structure if isinstance(s, dict)]
+        inferred_type = _infer_skeleton_type(l3_structure)
+
+        # 获取候选骨架（同平台或同品类优先，但不过滤太严）
+        query = db.query(Skeleton)
+        all_skeletons = query.all()
+
+        if not all_skeletons:
+            return success({"items": [], "total": 0, "message": "骨架库为空，请先提取骨架"})
+
+        # 对每个骨架计算匹配分数
+        scored = []
+        for sk in all_skeletons:
+            score = 0.0
+            reasons = []
+
+            # --- 1. L2 策略标签匹配（35%）---
+            sk_strategies = set()
+            if sk.strategy_desc:
+                # 从策略描述中提取关键词
+                for s in dismantle_strategies:
+                    if s in sk.strategy_desc:
+                        sk_strategies.add(s)
+                # 反向：骨架描述中的关键词出现在拆解情绪中
+                if dismantle_emotion and sk.strategy_desc:
+                    for kw in dismantle_emotion:
+                        if kw in sk.strategy_desc and len(kw) > 1:
+                            sk_strategies.add(kw)
+
+            if dismantle_strategies:
+                overlap = len(sk_strategies & dismantle_strategies)
+                strategy_score = min(overlap / max(len(dismantle_strategies), 1), 1.0) * 35
+                score += strategy_score
+                if overlap > 0:
+                    reasons.append(f"策略标签匹配 {overlap} 个")
+
+            # --- 2. L3 结构类型匹配（30%）---
+            if sk.skeleton_type and inferred_type:
+                if sk.skeleton_type == inferred_type:
+                    score += 30
+                    reasons.append(f"结构类型一致：{sk.skeleton_type}")
+                elif sk.skeleton_type in ("通用型",) or inferred_type in ("通用型",):
+                    score += 10
+                    reasons.append("通用型骨架，适配性广")
+
+            # 段落名称相似度（Jaccard）
+            if section_names and sk.structure_json:
+                sk_sections = sk.structure_json
+                if isinstance(sk_sections, str):
+                    import json as _json
+                    sk_sections = _json.loads(sk_sections)
+                sk_names = set(s.get("name", "") for s in sk_sections if isinstance(s, dict))
+                if sk_names and section_names:
+                    input_names = set(section_names)
+                    intersection = len(sk_names & input_names)
+                    union = len(sk_names | input_names)
+                    if union > 0:
+                        jaccard = intersection / union
+                        struct_score = jaccard * 15  # 额外最多 15 分
+                        score += struct_score
+                        if jaccard > 0.3:
+                            reasons.append(f"段落结构相似度 {jaccard:.0%}")
+
+            # --- 3. 品类匹配（15%）---
+            if dismantle_category and sk.suitable_for:
+                suitable = sk.suitable_for
+                if isinstance(suitable, str):
+                    suitable = [suitable]
+                if dismantle_category in suitable:
+                    score += 15
+                    reasons.append(f"品类匹配：{dismantle_category}")
+                # 部分匹配
+                elif any(dismune_category in str(s) for s in suitable):
+                    score += 8
+                    reasons.append(f"品类部分匹配")
+
+            # --- 4. 平台匹配（10%）---
+            if dismantle_platform and sk.platform:
+                if sk.platform == dismantle_platform:
+                    score += 10
+                    reasons.append(f"平台匹配：{dismantle_platform}")
+                elif sk.platform == "通用":
+                    score += 3
+
+            # --- 5. 效果加成（10%）---
+            roi = float(sk.avg_roi) if sk.avg_roi else 0
+            ctr = float(sk.avg_ctr) if sk.avg_ctr else 0
+            usage = sk.usage_count or 0
+
+            if roi > 0 or ctr > 0:
+                # ROI 归一化到 0-7 分（假设 ROI 5x 为满分）
+                roi_score = min(roi / 5.0, 1.0) * 7
+                # CTR 归一化到 0-3 分（假设 CTR 5% 为满分）
+                ctr_score = min(ctr / 5.0, 1.0) * 3
+                effect_score = roi_score + ctr_score
+                score += effect_score
+                if roi > 2.0:
+                    reasons.append(f"历史 ROI {roi:.1f}x")
+                if ctr > 1.5:
+                    reasons.append(f"历史 CTR {ctr:.1f}%")
+
+            # 使用次数加成（经验验证）
+            if usage > 0:
+                usage_bonus = min(usage / 10.0, 1.0) * 3  # 最多 3 分
+                score += usage_bonus
+                if usage >= 5:
+                    reasons.append(f"已验证 {usage} 次")
+
+            scored.append((score, reasons, sk))
+
+        # 排序取 Top N
+        scored.sort(key=lambda x: x[0], reverse=True)
+        limit = min(max(data.limit, 1), 10)
+
+        results = []
+        for score, reasons, sk in scored[:limit]:
+            sk_dict = _skeleton_to_dict(sk)
+            sk_dict["match_score"] = round(score, 1)
+            sk_dict["match_reasons"] = reasons
+            sk_dict["match_level"] = (
+                "high" if score >= 60 else
+                "medium" if score >= 35 else
+                "low"
+            )
+            results.append(sk_dict)
+
+        return success({
+            "items": results,
+            "total": len(results),
+            "query_analysis": {
+                "inferred_type": inferred_type,
+                "input_strategies": list(dismantle_strategies),
+                "input_category": dismantle_category,
+                "input_platform": dismantle_platform,
+            },
+        })
+    except Exception as e:
+        logger.error(f"Recommend skeletons failed: {e}", exc_info=True)
+        return error(f"骨架推荐失败: {str(e)}", 500)
         if val:
             tags.append(val)
     return tags
