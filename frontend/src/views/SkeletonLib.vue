@@ -298,12 +298,13 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
 import api, { importSkeletons, exportSkeletons, getFissionEffects } from '../api'
 
 const router = useRouter()
+const route = useRoute()
 
 const skeletons = ref([])
 const loading = ref(false)
@@ -581,6 +582,12 @@ watch(trendDialogVisible, (val) => {
 onMounted(async () => {
   await fetchAllSkeletons()
   await fetchSkeletons()
+  // 从 URL 查询参数恢复筛选状态（Dashboard 图表下钻导航）
+  const { skeleton_id } = route.query
+  if (skeleton_id) {
+    const sk = allSkeletons.value.find(s => s.id === Number(skeleton_id))
+    if (sk) viewDetail(sk)
+  }
 })
 </script>
 

@@ -41,6 +41,9 @@
           <el-select v-model="filterPlatform" placeholder="平台" clearable style="width:120px">
             <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
           </el-select>
+          <el-select v-model="filterCategory" placeholder="品类" clearable style="width:120px">
+            <el-option v-for="opt in options.category" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
           <el-select v-model="filterTagIds" placeholder="按标签筛选" clearable multiple collapse-tags style="width:160px">
             <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
@@ -263,16 +266,18 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api, { getOptions, getTags, getMaterialTags, addMaterialTag, removeMaterialTag, importMaterials, exportMaterials, getOptionsByGroup } from '../api'
 
 const router = useRouter()
+const route = useRoute()
 
 const materials = ref([])
 const loading = ref(false)
 const searchKeyword = ref('')
 const filterPlatform = ref('')
+const filterCategory = ref('')
 const filterStatus = ref(null)
 const filterTagIds = ref([])
 const page = ref(1)
@@ -355,6 +360,7 @@ const fetchMaterials = async () => {
   try {
     const params = { page: page.value, page_size: pageSize.value }
     if (filterPlatform.value) params.platform = filterPlatform.value
+    if (filterCategory.value) params.category = filterCategory.value
     if (filterStatus.value !== null) params.status = filterStatus.value
     if (filterTagIds.value.length > 0) params.tag_ids = filterTagIds.value.join(',')
     if (searchKeyword.value) params.keyword = searchKeyword.value
@@ -377,7 +383,7 @@ const fetchMaterials = async () => {
 }
 
 // 筛选变化时重新加载
-watch([filterPlatform, filterStatus, filterTagIds, searchKeyword], () => {
+watch([filterPlatform, filterCategory, filterStatus, filterTagIds, searchKeyword], () => {
   page.value = 1
   fetchMaterials()
 })
@@ -597,6 +603,9 @@ const submitCreateMaterial = async () => {
 }
 
 onMounted(() => {
+  // 从 URL 查询参数恢复筛选状态（Dashboard 图表下钻导航）
+  const { category } = route.query
+  if (category) filterCategory.value = category
   fetchMaterials()
   fetchOptions()
   fetchTags()

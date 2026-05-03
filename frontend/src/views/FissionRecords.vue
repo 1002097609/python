@@ -326,12 +326,13 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
 import api, { getFissions, getFissionDetail, createEffect, getFissionEffects, getOptions, getOptionsByGroup, updateFissionStatus } from '../api'
 
 const router = useRouter()
+const route = useRoute()
 
 // ============================================================
 // 数据状态
@@ -881,6 +882,11 @@ const batchDelete = async () => {
 // 页面初始化
 // ============================================================
 onMounted(() => {
+  // 从 URL 查询参数恢复筛选状态（Dashboard 图表下钻导航）
+  const { output_status } = route.query
+  if (output_status !== undefined && output_status !== null && output_status !== '') {
+    filterStatus.value = Number(output_status)
+  }
   fetchRecords()
   fetchSkeletons()
   fetchOptions()

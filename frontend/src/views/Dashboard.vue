@@ -60,14 +60,14 @@
     <div class="charts-row">
       <!-- 品类分布饼图 -->
       <div class="card chart-card">
-        <div class="chart-title">🏪 品类分布</div>
+        <div class="chart-title">🏪 品类分布 <span class="drill-hint">点击扇区跳转素材库</span></div>
         <div v-if="categoryData.length > 0" ref="categoryChartRef" class="chart-container"></div>
         <div v-else class="chart-empty"><el-empty description="暂无品类数据" :image-size="60" /></div>
       </div>
 
       <!-- 裂变漏斗 -->
       <div class="card chart-card">
-        <div class="chart-title">⚡ 裂变状态漏斗</div>
+        <div class="chart-title">⚡ 裂变状态漏斗 <span class="drill-hint">点击扇区跳转裂变记录</span></div>
         <div v-if="fissionData.length > 0" ref="fissionChartRef" class="chart-container"></div>
         <div v-else class="chart-empty"><el-empty description="暂无裂变数据" :image-size="60" /></div>
       </div>
@@ -94,7 +94,7 @@
         <div class="toolbar-left">
           <span class="dot"></span>
           <span class="card-title">🦴 骨架效果排行</span>
-          <span style="font-size:12px;color:#bbb;margin-left:4px">点击行查看裂变历史</span>
+          <span style="font-size:12px;color:#bbb;margin-left:4px">点击行跳转骨架库</span>
         </div>
         <el-radio-group v-model="skeletonSort" size="small">
           <el-radio-button label="avg_roi">按 ROI</el-radio-button>
@@ -136,93 +136,15 @@
       </el-table>
     </div>
   </div>
-
-  <!-- 下钻弹窗：品类素材列表 -->
-  <el-dialog v-model="categoryDrillVisible" width="800px" destroy-on-close>
-    <template #header>
-      <span>🏪 品类「{{ drillCategory }}」素材列表</span>
-    </template>
-    <el-table :data="drillMaterials" stripe size="default" v-loading="drillLoading">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="platform" label="平台" width="100" />
-      <el-table-column prop="status" label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.status >= 1 ? 'success' : 'info'">
-            {{ row.status >= 1 ? '已拆解' : '未拆解' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" width="170">
-        <template #default="{ row }">{{ row.created_at ? row.created_at.substring(0, 16) : '—' }}</template>
-      </el-table-column>
-    </el-table>
-  </el-dialog>
-
-  <!-- 下钻弹窗：裂变状态列表 -->
-  <el-dialog v-model="fissionDrillVisible" width="900px" destroy-on-close>
-    <template #header>
-      <span>⚡ 「{{ drillFissionLabel }}」裂变记录</span>
-    </template>
-    <el-table :data="drillFissions" stripe size="default" v-loading="drillLoading">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="skeleton_name" label="骨架" min-width="160" show-overflow-tooltip />
-      <el-table-column label="裂变模式" width="110">
-        <template #default="{ row }">
-          <el-tag size="small" type="warning" effect="plain">{{ row.fission_mode }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag size="small" :type="fissionStatusType(row.output_status)">
-            {{ fissionStatusLabel(row.output_status) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" width="170">
-        <template #default="{ row }">{{ row.created_at ? row.created_at.substring(0, 16) : '—' }}</template>
-      </el-table-column>
-    </el-table>
-  </el-dialog>
-
-  <!-- 下钻弹窗：骨架裂变历史 -->
-  <el-dialog v-model="skeletonDrillVisible" width="960px" destroy-on-close>
-    <template #header>
-      <span>🦴 骨架「{{ drillSkeletonName }}」裂变历史</span>
-    </template>
-    <el-table :data="drillSkeletonFissions" stripe size="default" v-loading="drillLoading">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column label="裂变模式" width="110">
-        <template #default="{ row }">
-          <el-tag size="small" type="warning" effect="plain">{{ row.fission_mode }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag size="small" :type="fissionStatusType(row.output_status)">
-            {{ fissionStatusLabel(row.output_status) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="预测效果" width="160">
-        <template #default="{ row }">
-          <span v-if="row.predicted_ctr || row.predicted_roi">
-            ROI {{ row.predicted_roi ?? '—' }} / CTR {{ row.predicted_ctr ?? '—' }}
-          </span>
-          <span v-else style="color:#ccc">—</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" width="170">
-        <template #default="{ row }">{{ row.created_at ? row.created_at.substring(0, 16) : '—' }}</template>
-      </el-table-column>
-    </el-table>
-  </el-dialog>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import api from '../api'
+
+const router = useRouter()
 
 // ============================================================
 // 数据状态
@@ -235,20 +157,6 @@ const trendData = ref([])
 
 const skeletonSort = ref('avg_roi')
 const trendDays = ref(30)
-
-// ============================================================
-// 图表下钻状态
-// ============================================================
-const categoryDrillVisible = ref(false)
-const drillCategory = ref('')
-const drillMaterials = ref([])
-const fissionDrillVisible = ref(false)
-const drillFissionLabel = ref('')
-const drillFissions = ref([])
-const skeletonDrillVisible = ref(false)
-const drillSkeletonName = ref('')
-const drillSkeletonFissions = ref([])
-const drillLoading = ref(false)
 
 // ============================================================
 // ECharts 实例和 DOM 引用
@@ -344,50 +252,19 @@ async function fetchAll() {
 }
 
 // ============================================================
-// 图表下钻
+// 图表下钻导航
 // ============================================================
-async function drillCategoryMaterials(category) {
-  drillCategory.value = category
-  drillLoading.value = true
-  categoryDrillVisible.value = true
-  try {
-    const { data } = await api.get('/material/', { params: { category, page: 1, page_size: 50 } })
-    drillMaterials.value = Array.isArray(data) ? data : (data.items || [])
-  } catch (e) {
-    console.error('加载品类素材失败', e)
-  }
-  drillLoading.value = false
+function drillCategoryMaterials(category) {
+  router.push({ path: '/material-lib', query: { category } })
 }
 
-async function drillFissionByStatus(status, label) {
-  drillFissionLabel.value = label
-  drillLoading.value = true
-  fissionDrillVisible.value = true
-  try {
-    const { data } = await api.get('/fission/', { params: { output_status: status, page: 1, page_size: 50 } })
-    drillFissions.value = Array.isArray(data) ? data : (data.items || [])
-  } catch (e) {
-    console.error('加载裂变记录失败', e)
-  }
-  drillLoading.value = false
-}
-
-async function loadSkeletonDrillFissions(skeletonId, skeletonName) {
-  drillSkeletonName.value = skeletonName
-  drillLoading.value = true
-  skeletonDrillVisible.value = true
-  try {
-    const { data } = await api.get('/fission/', { params: { skeleton_id: skeletonId, page: 1, page_size: 50 } })
-    drillSkeletonFissions.value = Array.isArray(data) ? data : (data.items || [])
-  } catch (e) {
-    console.error('加载骨架裂变历史失败', e)
-  }
-  drillLoading.value = false
+function drillFissionByStatus(status) {
+  router.push({ path: '/fission-records', query: { output_status: String(status) } })
 }
 
 function onSkeletonRowClick(row) {
   if (row && row.id) {
-    loadSkeletonDrillFissions(row.id, row.name)
+    router.push({ path: '/skeleton-lib', query: { skeleton_id: String(row.id) } })
   }
 }
 
@@ -460,7 +337,7 @@ function updateFissionChart() {
   fissionChart.off('click')
   fissionChart.on('click', params => {
     const item = data.find(d => d.name === params.name)
-    drillFissionByStatus(item?.status ?? 0, params.name)
+    drillFissionByStatus(item?.status ?? 0)
   })
 }
 
@@ -590,6 +467,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.drill-hint {
+  font-size: 12px;
+  color: #bbb;
+  font-weight: normal;
 }
 .chart-container { height: 300px; }
 .chart-tall { height: 350px; }
