@@ -62,6 +62,10 @@
             <div class="tag-edit-warning" v-if="tag._usageCount > 0">
               ⚠️ 此标签正被 <strong>{{ tag._usageCount }}</strong> 个素材使用，修改名称/类型将影响所有关联素材
             </div>
+            <!-- 未保存提示 -->
+            <div class="tag-edit-unsaved" v-if="isEditDirty(tag)">
+              ● 有未保存的修改
+            </div>
             <div class="tag-edit-row">
               <el-input v-model="editForm.name" size="small" style="width:120px" @keyup.enter="handleSaveEdit(tag)" />
               <el-select v-model="editForm.type" size="small" style="width:110px">
@@ -112,7 +116,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api, { getTags, getOptionsByGroup, createTag, updateTag, deleteTag, createTagFromOption } from '../api'
 
@@ -121,6 +126,8 @@ const allOptions = ref([])
 const submitting = ref(false)
 const editingId = ref(null)
 const useOptionImport = ref(false)
+// 记录编辑前的原始值，用于脏检测
+const editOriginal = ref({ name: '', type: '', option_id: null })
 
 const newTag = reactive({
   name: '',
@@ -252,6 +259,7 @@ const openEdit = async (tag) => {
   editForm.name = tag.name
   editForm.type = tag.type
   editForm.option_id = tag.option_id || null
+  editOriginal.value = { name: tag.name, type: tag.type, option_id: tag.option_id || null }
 
   // 检查使用情况，用于编辑时的保护提示
   try {
@@ -267,6 +275,7 @@ const cancelEdit = () => {
   editForm.name = ''
   editForm.type = ''
   editForm.option_id = null
+  editOriginal.value = { name: '', type: '', option_id: null }
 }
 
 // 编辑时切换类型，清空 option_id 避免旧值残留
@@ -307,6 +316,7 @@ const handleSaveEdit = async (tag) => {
     tag.option_id = updated.option_id || null
     ElMessage.success('标签更新成功')
     editingId.value = null
+    editOriginal.value = { name: '', type: '', option_id: null }
   } catch (e) {
     ElMessage.error('更新失败: ' + (e.response?.data?.detail || e.message))
   }
@@ -360,9 +370,48 @@ const handleDelete = async (tag) => {
   }
 }
 
+// 脏检测：编辑表单值与原始值对比
+const isEditDirty = (tag) => {
+  if (editingId.value !== tag.id) return false
+  return (
+    editForm.name !== editOriginal.value.name ||
+    editForm.type !== editOriginal.value.type ||
+    editForm.option_id !== editOriginal.value.option_id
+  )
+}
+
+// 路由离开守卫：有未保存修改时确认
+onBeforeRouteLeave((to, from, next) => {
+  if (editingId.value !== null) {
+    const dirty = isEditDirty({ id: editingId.value })
+    if (dirty) {
+      ElMessageBox.confirm(
+        '当前有未保存的标签修改，离开后将丢失修改内容。\n\n确认离开？',
+        '⚠️ 未保存的修改',
+        { type: 'warning', confirmButtonText: '离开', cancelButtonText: '取消' }
+      ).then(() => next()).catch(() => next(false))
+      return
+    }
+  }
+  next()
+})
+
+// 页面关闭/刷新前提示
+const handleBeforeUnload = (e) => {
+  if (editingId.value !== null) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 onMounted(() => {
   fetchTags()
   fetchOptions()
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
 
@@ -467,6 +516,14 @@ onMounted(() => {
   padding: 6px 10px; border-radius: 4px;
   margin-bottom: 8px;
   line-height: 1.5;
+}
+
+.tag-edit-unsaved {
+  font-size: 12px; color: #e74c3c;
+  background: #fef2f2; border-left: 3px solid #e74c3c;
+  padding: 4px 10px; border-radius: 4px;
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 
 /* 选项关联标识 */
