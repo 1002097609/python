@@ -210,8 +210,7 @@ def _call_longcat(title: str, content: str, platform: str = "", category: str = 
             response = client.post(
                 f"{LONGCAT_BASE_URL}/v1/messages",
                 headers={
-                    "x-api-key": LONGCAT_API_KEY,
-                    "anthropic-version": "2023-06-01",
+                    "Authorization": f"Bearer {LONGCAT_API_KEY}",
                     "content-type": "application/json",
                 },
                 json={
