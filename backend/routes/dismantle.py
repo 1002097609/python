@@ -13,12 +13,14 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from ..database import get_db
 from ..models.dismantle import Dismantle
 from ..models.material import Material
 from ..schemas.dismantle import DismantleCreate, DismantleUpdate, DismantleResponse
+from ..services.ai_dismantle import analyze_material
 
 # 创建拆解引擎专用路由器
 router = APIRouter()
@@ -149,3 +151,74 @@ def update_dismantle(dismantle_id: int, data: DismantleUpdate, db: Session = Dep
     db.commit()
     db.refresh(dismantle)
     return dismantle
+
+
+# ============================================================
+# AI 辅助拆解
+# ============================================================
+
+class AiAnalyzeRequest(BaseModel):
+    """AI 辅助拆解请求模型"""
+    title: str
+    content: str
+    platform: Optional[str] = ""
+    category: Optional[str] = ""
+
+
+class AiAnalyzeResponse(BaseModel):
+    """AI 辅助拆解响应模型"""
+    l1_topic: Optional[str] = None
+    l1_core_point: Optional[str] = None
+    l2_strategy: Optional[list] = None
+    l2_emotion: Optional[str] = None
+    l3_structure: Optional[list] = None
+    l4_elements: Optional[dict] = None
+    l5_expressions: Optional[dict] = None
+    _meta: Optional[dict] = None
+
+
+@router.post("/ai-analyze", response_model=AiAnalyzeResponse)
+def ai_analyze_dismantle(
+    data: AiAnalyzeRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    AI 辅助拆解接口。
+
+    根据素材标题和内容，自动分析生成 L1-L5 五层拆解数据。
+    返回的拆解数据可直接用于填充拆解表单，用户可在此基础上人工修正。
+
+    请求参数：
+        title (str):     素材标题（必填）
+        content (str):   素材内容/脚本（必填）
+        platform (str):  投放平台（可选）
+        category (str):  品类（可选，不传则自动检测）
+
+    返回值：
+        AiAnalyzeResponse: L1-L5 拆解数据 + 元信息（检测到的品类、结构类型等）
+
+    注意：
+        此接口仅生成拆解数据，不保存到数据库。
+        前端获取结果后，用户确认/修正后调用 POST /api/dismantle/ 保存。
+    """
+    if not data.title and not data.content:
+        raise HTTPException(status_code=400, detail="标题和内容不能同时为空")
+
+    result = analyze_material(
+        title=data.title or "",
+        content=data.content or "",
+        platform=data.platform or "",
+        category=data.category or "",
+    )
+
+    # 校验 meta 中的 category 是否存在于 option 表
+    if result.get("_meta", {}).get("detected_category"):
+        from ..models.option import Option
+        cat = result["_meta"]["detected_category"]
+        existing_cat = db.query(Option).filter(
+            Option.group_key == "category", Option.value == cat, Option.is_active == 1
+        ).first()
+        if not existing_cat:
+            result["_meta"]["detected_category"] = "通用"
+
+    return AiAnalyzeResponse(**result)
