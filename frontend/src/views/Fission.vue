@@ -255,6 +255,10 @@
                 <div class="l4-defaults" v-if="l4Defaults">
                   <div class="l4-defaults-hint">以下使用骨架默认 L4 元素，勾选「自定义覆盖」可修改</div>
                   <div class="l4-defaults-grid">
+                    <div class="l4-default-item" v-if="l4Defaults.title_formula">
+                      <span class="l4-default-label">📝 标题公式</span>
+                      <span class="l4-default-val">{{ l4Defaults.title_formula }}</span>
+                    </div>
                     <div class="l4-default-item" v-if="l4Defaults.hook">
                       <span class="l4-default-label">🎣 钩子句式</span>
                       <span class="l4-default-val">{{ l4Defaults.hook }}</span>
@@ -582,8 +586,8 @@ const l4Defaults = computed(() => {
   const sk = selectedSkeletonData.value
   if (!sk || !sk.elements_json) return null
   const el = sk.elements_json
-  const hasAny = el.hook || el.transition || el.interaction
-  return hasAny ? { hook: el.hook || '', transition: el.transition || '', interaction: el.interaction || '' } : null
+  const hasAny = el.title_formula || el.hook || el.transition || el.interaction
+  return hasAny ? { title_formula: el.title_formula || '', hook: el.hook || '', transition: el.transition || '', interaction: el.interaction || '' } : null
 })
 
 // 骨架筛选选项（从已加载骨架中提取）
