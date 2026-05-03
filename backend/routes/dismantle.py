@@ -46,6 +46,9 @@ def create_dismantle(data: DismantleCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(dismantle)
         return created_response(DismantleResponse.model_validate(dismantle).model_dump())
+    except ValueError as e:
+        db.rollback()
+        return error(str(e), 400)
     except Exception as e:
         db.rollback()
         logger.error(f"Create dismantle failed: {e}", exc_info=True)
@@ -101,6 +104,9 @@ def update_dismantle(dismantle_id: int, data: DismantleUpdate, db: Session = Dep
 
         for key, value in data.model_dump(exclude_unset=True).items():
             setattr(dismantle, key, value)
+
+        # 自动递增版本号
+        dismantle.version = (dismantle.version or 0) + 1
 
         db.commit()
         db.refresh(dismantle)

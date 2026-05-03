@@ -221,8 +221,11 @@ def get_skeleton_effects(skeleton_id: int, db: Session = Depends(get_db)):
                 "new_topic": f.new_topic,
                 "new_category": f.new_category,
                 "output_status": f.output_status,
-                "predicted_ctr": f.predicted_ctr,
-                "predicted_roi": f.predicted_roi,
+                "predicted_ctr_min": float(f.predicted_ctr_min) if f.predicted_ctr_min else None,
+                "predicted_ctr_max": float(f.predicted_ctr_max) if f.predicted_ctr_max else None,
+                "predicted_roi_min": float(f.predicted_roi_min) if f.predicted_roi_min else None,
+                "predicted_roi_max": float(f.predicted_roi_max) if f.predicted_roi_max else None,
+                "prediction_accuracy": float(f.prediction_accuracy) if f.prediction_accuracy else None,
                 "effect_summary": summary,
                 "created_at": str(f.created_at) if f.created_at else None,
             })

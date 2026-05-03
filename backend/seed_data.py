@@ -488,8 +488,10 @@ def seed_all():
                 output_title=new_topic,
                 output_content=output_content,
                 output_status=random.choice([0, 0, 1, 2, 3, 3]),
-                predicted_ctr=f"{random.uniform(1.0, 3.0):.1f}%-{random.uniform(3.0, 5.0):.1f}%",
-                predicted_roi=f"{random.uniform(1.5, 3.0):.1f}x-{random.uniform(3.0, 5.0):.1f}x",
+                predicted_ctr_min=round(random.uniform(1.0, 3.0), 2),
+                predicted_ctr_max=round(random.uniform(3.0, 5.0), 2),
+                predicted_roi_min=round(random.uniform(1.5, 3.0), 2),
+                predicted_roi_max=round(random.uniform(3.0, 5.0), 2),
             ))
             stats["fissions"] += 1
         db.commit()

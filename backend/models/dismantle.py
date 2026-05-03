@@ -82,8 +82,17 @@ class Dismantle(Base):
     # 执行拆解的用户标识
     dismantled_by = Column(String(50), comment="拆解人")
 
+    # 版本号，每次更新自动递增
+    version = Column(Integer, default=1, comment="版本号，更新时自动递增")
+
+    # 最后编辑人
+    updated_by = Column(String(50), comment="最后编辑人")
+
     # 创建时间，自动设置为当前时间
     created_at = Column(DateTime, server_default=func.now())
+
+    # 更新时间，修改时自动更新
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="最后更新时间")
 
     # 索引：加速按素材 ID 和骨架 ID 的查询
     __table_args__ = (

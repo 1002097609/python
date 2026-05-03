@@ -36,6 +36,7 @@ class TestCreateSkeletonFromDismantle:
         d_resp = client.post("/api/dismantle/", json={
             "material_id": sample_material.id,
             "l1_topic": "幂等测试",
+            "l3_structure": [{"name": "开头", "function": "引入"}],
         })
         dismantle_id = d_resp.json()["data"]["id"]
 

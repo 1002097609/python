@@ -17,7 +17,7 @@
   L5 表达层 -- 具体文字/视觉表达（叶子，可替换）
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional
 from datetime import datetime
 
@@ -30,7 +30,7 @@ class DismantleCreate(BaseModel):
         material_id (int):   必填。关联的素材 ID，拆解操作必须基于已有素材。
 
         # L1 主题层
-        l1_topic (str):      主题，素材的核心讲述内容，如"护肤流程"。
+        l1_topic (str):      必填。主题，素材的核心讲述内容，如"护肤流程"。
         l1_core_point (str): 核心观点，素材最想传达的一句话。
 
         # L2 策略层
@@ -38,7 +38,7 @@ class DismantleCreate(BaseModel):
         l2_emotion (str):    情绪基调，如"轻松幽默"、"焦虑共鸣"。
 
         # L3 结构层
-        l3_structure (list): 结构列表，描述素材的段落逻辑，如 [{"name": "开头", "function": "痛点共鸣"}, ...]。
+        l3_structure (list): 必填。结构列表，描述素材的段落逻辑，如 [{"name": "开头", "function": "痛点共鸣"}, ...]。
         l3_summary (str):    结构摘要，对整体内容骨架的文字描述。
 
         # L4 元素层
@@ -46,11 +46,15 @@ class DismantleCreate(BaseModel):
 
         # L5 表达层
         l5_expressions (dict): 表达字典，包含具体的文字表达、视觉元素描述等可替换内容。
+
+    校验规则：
+        - l1_topic 和 l3_structure 为必填（核心骨架来源），缺失返回 400。
+        - l3_structure 每个元素必须包含 name 和 function 字段。
     """
     material_id: int                    # 关联素材 ID（必填）
 
     # L1 主题层
-    l1_topic: Optional[str] = None       # 主题内容
+    l1_topic: Optional[str] = None       # 主题内容（必填，骨架提取必需）
     l1_core_point: Optional[str] = None  # 核心观点
 
     # L2 策略层
@@ -58,7 +62,7 @@ class DismantleCreate(BaseModel):
     l2_emotion: Optional[str] = None     # 情绪基调
 
     # L3 结构层
-    l3_structure: Optional[list] = None  # 结构列表（段落逻辑）
+    l3_structure: Optional[list] = None  # 结构列表（必填，骨架提取必需）
     l3_summary: Optional[str] = None     # 结构摘要
 
     # L4 元素层
@@ -66,6 +70,27 @@ class DismantleCreate(BaseModel):
 
     # L5 表达层
     l5_expressions: Optional[dict] = None  # 可替换的具体表达内容
+
+    @model_validator(mode="after")
+    def validate_core_fields(self):
+        """校验核心骨架字段完整性：l1_topic 和 l3_structure 为必填。"""
+        errors = []
+        if not self.l1_topic or not str(self.l1_topic).strip():
+            errors.append("l1_topic 为必填字段，是骨架提取的核心来源")
+        if not self.l3_structure:
+            errors.append("l3_structure 为必填字段，是骨架提取的核心来源")
+        elif isinstance(self.l3_structure, list):
+            for i, sec in enumerate(self.l3_structure):
+                if not isinstance(sec, dict):
+                    errors.append(f"l3_structure[{i}] 必须为对象")
+                    continue
+                if not sec.get("name"):
+                    errors.append(f"l3_structure[{i}].name 为必填字段")
+                if not sec.get("function"):
+                    errors.append(f"l3_structure[{i}].function 为必填字段")
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
 
 
 class DismantleUpdate(BaseModel):
@@ -76,6 +101,7 @@ class DismantleUpdate(BaseModel):
         各字段含义同 DismantleCreate，均为可选。
 
         skeleton_id (int): 关联骨架 ID，在从拆解记录提取骨架后回填此字段。
+        updated_by (str): 最后编辑人。
     """
     # L1 主题层
     l1_topic: Optional[str] = None
@@ -97,6 +123,9 @@ class DismantleUpdate(BaseModel):
 
     # 关联骨架（提取骨架后回填）
     skeleton_id: Optional[int] = None
+
+    # 编辑人
+    updated_by: Optional[str] = None
 
 
 class DismantleResponse(BaseModel):
@@ -144,7 +173,10 @@ class DismantleResponse(BaseModel):
 
     skeleton_id: Optional[int]           # 关联骨架 ID
     dismantled_by: Optional[str]         # 拆解人
+    version: int = 1                     # 版本号
+    updated_by: Optional[str]            # 最后编辑人
     created_at: datetime                 # 创建时间
+    updated_at: Optional[datetime] = None  # 最后更新时间
 
     class Config:
         # 允许从 SQLAlchemy ORM 对象属性中读取数据

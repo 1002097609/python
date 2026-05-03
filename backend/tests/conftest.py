@@ -196,8 +196,10 @@ def sample_fission(db, sample_skeleton):
         output_title="办公室减压零食推荐",
         output_content="工作累了？试试这些好吃的零食...",
         output_status=0,
-        predicted_ctr="1.1%-1.4%",
-        predicted_roi="1.4x-1.9x",
+        predicted_ctr_min=1.1,
+        predicted_ctr_max=1.4,
+        predicted_roi_min=1.4,
+        predicted_roi_max=1.9,
     )
     db.add(fission)
     db.commit()

@@ -24,18 +24,36 @@ class TestCreateDismantle:
             "l1_core_point": "核心观点",
             "l2_strategy": ["策略1"],
             "l2_emotion": "轻松幽默",
-            "l3_structure": [{"name": "开头", "ratio": 0.3}],
+            "l3_structure": [{"name": "开头", "function": "痛点共鸣", "ratio": 0.3}],
         })
         assert resp.status_code == 201
         data = resp.json()["data"]
         assert data["l1_topic"] == "测试主题"
         assert data["material_id"] == sample_material.id
 
+    def test_create_dismantle_missing_required(self, client: TestClient, sample_material):
+        """缺少必填字段 l1_topic 和 l3_structure"""
+        resp = client.post("/api/dismantle/", json={
+            "material_id": sample_material.id,
+        })
+        # Pydantic model_validator 校验失败返回 422
+        assert resp.status_code == 422
+
+    def test_create_dismantle_missing_l3_function(self, client: TestClient, sample_material):
+        """l3_structure 缺少 function 字段"""
+        resp = client.post("/api/dismantle/", json={
+            "material_id": sample_material.id,
+            "l1_topic": "测试",
+            "l3_structure": [{"name": "开头"}],
+        })
+        assert resp.status_code == 422
+
     def test_create_dismantle_material_not_found(self, client: TestClient):
         """素材不存在"""
         resp = client.post("/api/dismantle/", json={
             "material_id": 99999,
             "l1_topic": "测试",
+            "l3_structure": [{"name": "开头", "function": "引入"}],
         })
         assert resp.json()["code"] == 404
 
@@ -44,6 +62,7 @@ class TestCreateDismantle:
         client.post("/api/dismantle/", json={
             "material_id": sample_material.id,
             "l1_topic": "状态测试",
+            "l3_structure": [{"name": "开头", "function": "引入"}],
         })
         material_resp = client.get(f"/api/material/{sample_material.id}")
         assert material_resp.json()["data"]["status"] == 1

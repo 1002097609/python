@@ -29,8 +29,10 @@ class TestExecuteFission:
         data = resp.json()["data"]
         assert data["output_title"] == "办公室减压零食推荐"
         assert data["output_content"] is not None
-        assert data["predicted_ctr"] is not None
-        assert data["predicted_roi"] is not None
+        assert data["predicted_ctr_min"] is not None
+        assert data["predicted_ctr_max"] is not None
+        assert data["predicted_roi_min"] is not None
+        assert data["predicted_roi_max"] is not None
 
     def test_execute_fission_skeleton_not_found(self, client: TestClient):
         """骨架不存在"""

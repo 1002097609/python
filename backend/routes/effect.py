@@ -101,7 +101,7 @@ def _update_skeleton_stats(db, skeleton_id: int):
 
 
 def _update_fission_actual(db, fission_id: int):
-    """更新裂变记录的实际效果指标。"""
+    """更新裂变记录的实际效果指标，并计算预测准确率。"""
     from sqlalchemy import desc
     fission = db.query(Fission).filter(Fission.id == fission_id).first()
     if not fission:
@@ -115,9 +115,14 @@ def _update_fission_actual(db, fission_id: int):
     if latest:
         fission.actual_roi = latest.roi
         fission.actual_ctr = latest.ctr
+        if fission.predicted_roi_min and float(fission.predicted_roi_min) > 0:
+            fission.prediction_accuracy = round(
+                float(latest.roi) / float(fission.predicted_roi_min), 2
+            )
     else:
         fission.actual_roi = None
         fission.actual_ctr = None
+        fission.prediction_accuracy = None
 
 
 def _effect_to_dict(e: EffectData) -> dict:
@@ -152,6 +157,7 @@ def create_effect(data: EffectCreate, db: Session = Depends(get_db)):
         raw = _auto_calculate(raw)
         effect = EffectData(**raw)
         db.add(effect)
+        db.flush()  # 确保 effect 在查询前可见
 
         if data.fission_id:
             _update_fission_actual(db, data.fission_id)

@@ -93,17 +93,26 @@ class Fission(Base):
     # 3 = 已投放（正在投放中，可回写效果数据）
     output_status = Column(Integer, default=0, comment="0=草稿 1=待审核 2=已采用 3=已投放")
 
-    # 预测点击率范围，基于骨架历史 avg_ctr 计算
-    predicted_ctr = Column(String(20), comment="预测 CTR 范围")
+    # 预测点击率范围（最小值），基于骨架历史 avg_ctr 计算
+    predicted_ctr_min = Column(DECIMAL(5, 2), comment="预测 CTR% 下限")
 
-    # 预测 ROI 范围，基于骨架历史 avg_roi 计算
-    predicted_roi = Column(String(20), comment="预测 ROI 范围")
+    # 预测点击率范围（最大值），基于骨架历史 avg_ctr 计算
+    predicted_ctr_max = Column(DECIMAL(5, 2), comment="预测 CTR% 上限")
+
+    # 预测 ROI 范围（最小值），基于骨架历史 avg_roi 计算
+    predicted_roi_min = Column(DECIMAL(5, 2), comment="预测 ROI 下限")
+
+    # 预测 ROI 范围（最大值），基于骨架历史 avg_roi 计算
+    predicted_roi_max = Column(DECIMAL(5, 2), comment="预测 ROI 上限")
 
     # 投放后的实际点击率（可选，投放结束后由 effect_data 回写）
     actual_ctr = Column(DECIMAL(5, 2), comment="实际 CTR%")
 
     # 投放后的实际 ROI（可选，投放结束后由 effect_data 回写）
     actual_roi = Column(DECIMAL(5, 2), comment="实际 ROI")
+
+    # 预测准确率（actual_roi / predicted_roi_min），效果回写时自动计算
+    prediction_accuracy = Column(DECIMAL(5, 2), comment="预测准确率（实际/预测下限）")
 
     # 创建人标识
     created_by = Column(String(50))

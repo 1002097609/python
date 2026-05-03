@@ -42,6 +42,78 @@ class FissionRequest(BaseModel):
     replacement: Optional[dict] = None
 
 
+class BatchFissionItem(BaseModel):
+    """批量裂变单条参数"""
+    new_topic: Optional[str] = None
+    new_category: Optional[str] = None
+    new_platform: Optional[str] = None
+    new_style: Optional[str] = None
+    replacement: Optional[dict] = None
+
+
+class BatchFissionRequest(BaseModel):
+    """批量裂变请求参数模型"""
+    skeleton_id: int
+    source_material_id: Optional[int] = None
+    fission_mode: str
+    items: list[BatchFissionItem]
+
+
+def _create_single_fission(db, skeleton, data: FissionRequest) -> dict:
+    """执行单次裂变的核心逻辑，返回创建的 fission 响应字典。"""
+    structure = skeleton.structure_json
+    elements = skeleton.elements_json
+    strategy = skeleton.strategy_desc
+
+    if isinstance(structure, str):
+        structure = json.loads(structure)
+    if isinstance(elements, str):
+        elements = json.loads(elements)
+
+    replacement = data.replacement or {}
+
+    output_content = generate_output(
+        fission_mode=data.fission_mode,
+        structure=structure,
+        elements=elements,
+        strategy=strategy,
+        new_topic=data.new_topic or "",
+        replacement=replacement,
+    )
+
+    prediction = _predict_performance(skeleton, data.fission_mode, db)
+
+    fission = Fission(
+        skeleton_id=data.skeleton_id,
+        source_material_id=data.source_material_id,
+        fission_mode=data.fission_mode,
+        new_topic=data.new_topic,
+        new_category=data.new_category,
+        new_platform=data.new_platform,
+        new_style=data.new_style,
+        replacement_json=replacement,
+        output_title=f"{data.new_topic or '未命名'}",
+        output_content=output_content,
+        output_status=0,
+        predicted_ctr_min=prediction["ctr_min"],
+        predicted_ctr_max=prediction["ctr_max"],
+        predicted_roi_min=prediction["roi_min"],
+        predicted_roi_max=prediction["roi_max"],
+    )
+    db.add(fission)
+    db.flush()
+
+    return {
+        "fission_id": fission.id,
+        "output_title": fission.output_title,
+        "output_content": output_content,
+        "predicted_ctr_min": float(prediction["ctr_min"]),
+        "predicted_ctr_max": float(prediction["ctr_max"]),
+        "predicted_roi_min": float(prediction["roi_min"]),
+        "predicted_roi_max": float(prediction["roi_max"]),
+    }
+
+
 @router.post("/", status_code=201)
 def execute_fission(data: FissionRequest, db: Session = Depends(get_db)):
     """
@@ -52,68 +124,72 @@ def execute_fission(data: FissionRequest, db: Session = Depends(get_db)):
         if not skeleton:
             return error("骨架不存在", 404)
 
-        structure = skeleton.structure_json
-        elements = skeleton.elements_json
-        strategy = skeleton.strategy_desc
-
-        if isinstance(structure, str):
-            structure = json.loads(structure)
-        if isinstance(elements, str):
-            elements = json.loads(elements)
-
-        replacement = data.replacement or {}
-
-        output_content = generate_output(
-            fission_mode=data.fission_mode,
-            structure=structure,
-            elements=elements,
-            strategy=strategy,
-            new_topic=data.new_topic or "",
-            replacement=replacement,
-        )
-
-        prediction = _predict_performance(skeleton, data.fission_mode, db)
-
-        fission = Fission(
-            skeleton_id=data.skeleton_id,
-            source_material_id=data.source_material_id,
-            fission_mode=data.fission_mode,
-            new_topic=data.new_topic,
-            new_category=data.new_category,
-            new_platform=data.new_platform,
-            new_style=data.new_style,
-            replacement_json=replacement,
-            output_title=f"{data.new_topic or '未命名'}",
-            output_content=output_content,
-            output_status=0,
-            predicted_ctr=prediction["ctr"],
-            predicted_roi=prediction["roi"],
-        )
-        db.add(fission)
-
+        result = _create_single_fission(db, skeleton, data)
         skeleton.usage_count = (skeleton.usage_count or 0) + 1
 
         db.commit()
-        db.refresh(fission)
-        log_operation(db, "fission", fission.id, "create", {
+        log_operation(db, "fission", result["fission_id"], "create", {
             "skeleton_id": data.skeleton_id,
             "fission_mode": data.fission_mode,
             "new_topic": data.new_topic,
-            "predicted_ctr": prediction["ctr"],
-            "predicted_roi": prediction["roi"],
+            "predicted_ctr_min": result["predicted_ctr_min"],
+            "predicted_ctr_max": result["predicted_ctr_max"],
+            "predicted_roi_min": result["predicted_roi_min"],
+            "predicted_roi_max": result["predicted_roi_max"],
         })
 
-        return created_response({
-            "fission_id": fission.id,
-            "output_title": fission.output_title,
-            "output_content": output_content,
-            "predicted_ctr": prediction["ctr"],
-            "predicted_roi": prediction["roi"],
-        })
+        return created_response(result)
     except Exception as e:
         db.rollback()
         logger.error(f"Execute fission failed: {e}", exc_info=True)
         return error(f"裂变失败: {str(e)}", 500)
+
+
+@router.post("/batch", status_code=201)
+def execute_batch_fission(data: BatchFissionRequest, db: Session = Depends(get_db)):
+    """
+    批量执行裂变操作：同一骨架 + 裂变模式，对多个新主题/品类批量生成素材。
+    """
+    try:
+        skeleton = db.query(Skeleton).filter(Skeleton.id == data.skeleton_id).first()
+        if not skeleton:
+            return error("骨架不存在", 404)
+
+        if not data.items:
+            return error("items 不能为空", 400)
+
+        results = []
+        for item in data.items:
+            single_req = FissionRequest(
+                skeleton_id=data.skeleton_id,
+                source_material_id=data.source_material_id,
+                fission_mode=data.fission_mode,
+                new_topic=item.new_topic,
+                new_category=item.new_category,
+                new_platform=item.new_platform,
+                new_style=item.new_style,
+                replacement=item.replacement,
+            )
+            result = _create_single_fission(db, skeleton, single_req)
+            results.append(result)
+
+        skeleton.usage_count = (skeleton.usage_count or 0) + len(results)
+
+        db.commit()
+        log_operation(db, "fission", 0, "batch_create", {
+            "skeleton_id": data.skeleton_id,
+            "fission_mode": data.fission_mode,
+            "count": len(results),
+        })
+
+        return created_response({
+            "count": len(results),
+            "items": results,
+        })
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Batch fission failed: {e}", exc_info=True)
+        return error(f"批量裂变失败: {str(e)}", 500)
 
 
 def _predict_performance(skeleton, fission_mode, db=None) -> dict:
@@ -149,8 +225,10 @@ def _predict_performance(skeleton, fission_mode, db=None) -> dict:
         factor = factors.get(fission_mode, 0.7)
 
     return {
-        "ctr": f"{base_ctr * factor * 0.9:.1f}%-{base_ctr * factor * 1.1:.1f}%",
-        "roi": f"{base_roi * factor * 0.9:.1f}x-{base_roi * factor * 1.1:.1f}x",
+        "ctr_min": round(base_ctr * factor * 0.9, 2),
+        "ctr_max": round(base_ctr * factor * 1.1, 2),
+        "roi_min": round(base_roi * factor * 0.9, 2),
+        "roi_max": round(base_roi * factor * 1.1, 2),
     }
 
 
@@ -203,10 +281,13 @@ def list_fissions(
                 "output_title": item.output_title,
                 "output_content": item.output_content,
                 "output_status": item.output_status,
-                "predicted_ctr": item.predicted_ctr,
-                "predicted_roi": item.predicted_roi,
+                "predicted_ctr_min": float(item.predicted_ctr_min) if item.predicted_ctr_min else None,
+                "predicted_ctr_max": float(item.predicted_ctr_max) if item.predicted_ctr_max else None,
+                "predicted_roi_min": float(item.predicted_roi_min) if item.predicted_roi_min else None,
+                "predicted_roi_max": float(item.predicted_roi_max) if item.predicted_roi_max else None,
                 "actual_ctr": float(item.actual_ctr) if item.actual_ctr else None,
                 "actual_roi": float(item.actual_roi) if item.actual_roi else None,
+                "prediction_accuracy": float(item.prediction_accuracy) if item.prediction_accuracy else None,
                 "created_at": item.created_at,
             })
         return success({"items": result, "total": total, "page": page, "page_size": page_size})
@@ -321,10 +402,13 @@ def get_fission(fission_id: int, db: Session = Depends(get_db)):
             "output_title": item.output_title,
             "output_content": item.output_content,
             "output_status": item.output_status,
-            "predicted_ctr": item.predicted_ctr,
-            "predicted_roi": item.predicted_roi,
+            "predicted_ctr_min": float(item.predicted_ctr_min) if item.predicted_ctr_min else None,
+            "predicted_ctr_max": float(item.predicted_ctr_max) if item.predicted_ctr_max else None,
+            "predicted_roi_min": float(item.predicted_roi_min) if item.predicted_roi_min else None,
+            "predicted_roi_max": float(item.predicted_roi_max) if item.predicted_roi_max else None,
             "actual_ctr": float(item.actual_ctr) if item.actual_ctr else None,
             "actual_roi": float(item.actual_roi) if item.actual_roi else None,
+            "prediction_accuracy": float(item.prediction_accuracy) if item.prediction_accuracy else None,
             "effects": [
                 {
                     "id": e.id,

@@ -66,8 +66,8 @@ class TestFullBusinessFlow:
         })
         assert fission_resp.status_code == 201
         fission_id = fission_resp.json()["data"]["fission_id"]
-        assert fission_resp.json()["data"]["predicted_ctr"] is not None
-        assert fission_resp.json()["data"]["predicted_roi"] is not None
+        assert fission_resp.json()["data"]["predicted_ctr_min"] is not None
+        assert fission_resp.json()["data"]["predicted_roi_min"] is not None
 
         # Step 5: 录入效果数据
         effect_resp = client.post("/api/effect/", json={
@@ -122,6 +122,7 @@ class TestMaterialDeleteCascade:
         dismantle_resp = client.post("/api/dismantle/", json={
             "material_id": material_id,
             "l1_topic": "测试",
+            "l3_structure": [{"name": "开头", "function": "引入"}],
         })
         dismantle_id = dismantle_resp.json()["data"]["id"]
 
