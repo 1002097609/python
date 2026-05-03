@@ -10,9 +10,12 @@
 """
 
 import os
+import logging
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
+
+logger = logging.getLogger(__name__)
 
 # 加载 .env 文件中的环境变量（DB_HOST、DB_PORT 等配置）
 load_dotenv()
@@ -24,15 +27,28 @@ DB_PORT = os.getenv("DB_PORT", "3306")             # 数据库端口，MySQL 默
 DB_USER = os.getenv("DB_USER", "root")             # 数据库用户名
 DB_PASSWORD = os.getenv("DB_PASSWORD", "root")     # 数据库密码
 DB_NAME = os.getenv("DB_NAME", "material_system")  # 数据库名称
-DB_ECHO = os.getenv("DB_ECHO", "true").lower() in ("true", "1", "yes")  # 是否打印 SQL
+DB_ECHO = os.getenv("DB_ECHO", "false").lower() in ("true", "1", "yes")  # 是否打印 SQL，生产默认关闭
+
+# 连接池配置
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))           # 连接池大小
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))     # 最大溢出连接数
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "3600"))   # 连接回收时间（秒）
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))      # 获取连接超时（秒）
 
 # 组装 MySQL 连接 URL，使用 pymysql 驱动，字符集设为 utf8mb4 支持 emoji
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
 
 # 创建 SQLAlchemy 引擎
-# echo=True 表示在控制台输出 SQL 语句（调试用，生产环境建议关闭）
-# pool_pre_ping=True 表示连接池在使用前先检测连接是否存活，防止连接断开导致报错
-engine = create_engine(DATABASE_URL, echo=DB_ECHO, pool_pre_ping=True)
+# pool_pre_ping=True 连接前先检测存活，防止连接断开报错
+engine = create_engine(
+    DATABASE_URL,
+    echo=DB_ECHO,
+    pool_pre_ping=True,
+    pool_size=DB_POOL_SIZE,
+    max_overflow=DB_MAX_OVERFLOW,
+    pool_recycle=DB_POOL_RECYCLE,
+    pool_timeout=DB_POOL_TIMEOUT,
+)
 
 # 创建会话工厂
 # autocommit=False 表示不自动提交，需手动调用 commit()
@@ -70,6 +86,7 @@ def init_db():
 
     注意：此函数在应用启动时调用一次即可，重复调用不会删除已有数据。
     """
+    logger.info("Initializing database...")
     # 第一步：连接到 MySQL 服务器（不指定具体数据库），用于创建数据库本身
     temp_url = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/?charset=utf8mb4"
     temp_engine = create_engine(temp_url, echo=False)  # 临时引擎，关闭 SQL 输出
@@ -80,3 +97,4 @@ def init_db():
 
     # 第二步：在已存在的数据库中，根据所有已注册 ORM 模型创建对应的表
     Base.metadata.create_all(bind=engine)
+    logger.info("Database initialized successfully")

@@ -15,6 +15,7 @@
 import csv
 import io
 import json
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -23,6 +24,9 @@ from decimal import Decimal
 from ..database import get_db
 from ..models.skeleton import Skeleton
 from ..services.operation_log import log_operation
+from ..response import success, created as created_response, no_content as no_content_response, error
+
+logger = logging.getLogger(__name__)
 
 # 创建骨架库专用路由器
 router = APIRouter()
@@ -31,14 +35,6 @@ router = APIRouter()
 def _skeleton_to_dict(s: Skeleton) -> dict:
     """
     将 Skeleton ORM 对象转换为普通字典，处理 Decimal 类型的序列化问题。
-
-    数据库中的 avg_roi 和 avg_ctr 字段为 Decimal 类型，JSON 序列化时需要转为 float。
-
-    参数：
-        s (Skeleton): 骨架 ORM 实例。
-
-    返回值：
-        dict: 包含骨架各字段的普通字典，可直接被 FastAPI 序列化为 JSON 响应。
     """
     return {
         "id": s.id,
@@ -70,328 +66,263 @@ def list_skeletons(
 ):
     """
     分页查询骨架列表，支持按平台、骨架类型筛选，支持按使用次数/平均ROI/平均CTR/创建时间排序。
-
-    请求参数（均为可选查询参数）：
-        platform (str):       按投放平台筛选，如 "抖音"。
-        skeleton_type (str):  按骨架类型筛选，如 "测评对比型"、"红黑榜型" 等。
-        sort_by (str):        排序字段，可选值为 usage_count / avg_roi / avg_ctr / created_at。
-                              默认为 usage_count（使用次数）。
-        page (int):           页码，从 1 开始，默认值 1。
-        page_size (int):      每页条数，范围 1-100，默认值 20。
-
-    返回值：
-        list[dict]: 骨架字典列表，按指定字段倒序排列。
     """
-    # 构建基础查询
-    query = db.query(Skeleton)
+    try:
+        query = db.query(Skeleton)
 
-    # 动态追加筛选条件
-    if platform:
-        query = query.filter(Skeleton.platform == platform)
-    if skeleton_type:
-        query = query.filter(Skeleton.skeleton_type == skeleton_type)
-    if keyword:
-        query = query.filter(Skeleton.name.contains(keyword) | Skeleton.strategy_desc.contains(keyword))
+        if platform:
+            query = query.filter(Skeleton.platform == platform)
+        if skeleton_type:
+            query = query.filter(Skeleton.skeleton_type == skeleton_type)
+        if keyword:
+            query = query.filter(Skeleton.name.contains(keyword) | Skeleton.strategy_desc.contains(keyword))
 
-    # 根据传入的排序字段动态获取 ORM 列属性，默认使用 usage_count
-    sort_column = getattr(Skeleton, sort_by, Skeleton.usage_count)
-    query = query.order_by(sort_column.desc())
+        sort_column = getattr(Skeleton, sort_by, Skeleton.usage_count)
+        query = query.order_by(sort_column.desc())
 
-    # 先查总数，再分页取数据
-    total = query.count()
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return {
-        "items": [_skeleton_to_dict(i) for i in items],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    }
+        total = query.count()
+        items = query.offset((page - 1) * page_size).limit(page_size).all()
+        return success({
+            "items": [_skeleton_to_dict(i) for i in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        })
+    except Exception as e:
+        logger.error(f"List skeletons failed: {e}", exc_info=True)
+        return error(f"查询骨架列表失败: {str(e)}", 500)
 
 
 @router.put("/{skeleton_id}")
 def update_skeleton(skeleton_id: int, data: dict, db: Session = Depends(get_db)):
     """
     更新骨架信息。支持部分更新。
-
-    可更新字段：name / skeleton_type / platform / strategy_desc /
-               structure_json / elements_json / style_tags / suitable_for
     """
-    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
-    if not skeleton:
-        raise HTTPException(status_code=404, detail="骨架不存在")
+    try:
+        skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+        if not skeleton:
+            return error("骨架不存在", 404)
 
-    for key, value in data.items():
-        if hasattr(skeleton, key) and value is not None:
-            setattr(skeleton, key, value)
+        for key, value in data.items():
+            if hasattr(skeleton, key) and value is not None:
+                setattr(skeleton, key, value)
 
-    db.commit()
-    db.refresh(skeleton)
-    log_operation(db, "skeleton", skeleton.id, "update", {"changed_fields": list(data.keys())})
-    return _skeleton_to_dict(skeleton)
+        db.commit()
+        db.refresh(skeleton)
+        log_operation(db, "skeleton", skeleton.id, "update", {"changed_fields": list(data.keys())})
+        return success(_skeleton_to_dict(skeleton))
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Update skeleton {skeleton_id} failed: {e}", exc_info=True)
+        return error(f"更新骨架失败: {str(e)}", 500)
 
 
 @router.get("/{skeleton_id}")
 def get_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
     """
     根据骨架 ID 查询单个骨架的详细信息。
-
-    请求参数：
-        skeleton_id (int): 骨架的唯一标识 ID。
-
-    返回值:
-        Skeleton: 骨架 ORM 对象（FastAPI 自动序列化）。
-
-    异常：
-        HTTP 404: 当骨架不存在时抛出。
     """
-    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
-    if not skeleton:
-        raise HTTPException(status_code=404, detail="骨架不存在")
-    return skeleton
+    try:
+        skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+        if not skeleton:
+            return error("骨架不存在", 404)
+        return success(_skeleton_to_dict(skeleton))
+    except Exception as e:
+        logger.error(f"Get skeleton {skeleton_id} failed: {e}", exc_info=True)
+        return error(f"查询骨架失败: {str(e)}", 500)
 
 
-@router.delete("/{skeleton_id}", status_code=204)
+@router.delete("/{skeleton_id}")
 def delete_skeleton(skeleton_id: int, db: Session = Depends(get_db)):
     """
     删除指定的骨架记录。
-
-    请求参数：
-        skeleton_id (int): 要删除的骨架 ID。
-
-    返回值：
-        无返回体，HTTP 状态码 204 表示删除成功。
-
-    异常：
-        HTTP 404: 当骨架不存在时抛出。
     """
-    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
-    if not skeleton:
-        raise HTTPException(status_code=404, detail="骨架不存在")
+    try:
+        skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+        if not skeleton:
+            return error("骨架不存在", 404)
 
-    # 级联删除：先删关联的裂变记录和效果数据
-    from ..models.fission import Fission
-    from ..models.effect_data import EffectData
+        # 级联删除：先删关联的裂变记录和效果数据
+        from ..models.fission import Fission
+        from ..models.effect_data import EffectData
 
-    fissions = db.query(Fission).filter(Fission.skeleton_id == skeleton_id).all()
-    for ff in fissions:
-        db.query(EffectData).filter(EffectData.fission_id == ff.id).delete()
-    db.query(Fission).filter(Fission.skeleton_id == skeleton_id).delete()
+        fissions = db.query(Fission).filter(Fission.skeleton_id == skeleton_id).all()
+        for ff in fissions:
+            db.query(EffectData).filter(EffectData.fission_id == ff.id).delete()
+        db.query(Fission).filter(Fission.skeleton_id == skeleton_id).delete()
 
-    name = skeleton.name
-    fissions_count = len(fissions)
-    source_material_id = skeleton.source_material_id
-    db.delete(skeleton)
-    db.commit()
-    log_operation(db, "skeleton", skeleton_id, "delete", {"name": name, "cascade_fissions": fissions_count})
+        name = skeleton.name
+        fissions_count = len(fissions)
+        source_material_id = skeleton.source_material_id
+        db.delete(skeleton)
+        db.commit()
+        log_operation(db, "skeleton", skeleton_id, "delete", {"name": name, "cascade_fissions": fissions_count})
 
-    # 回退关联素材状态为"未拆解"，因为骨架已不存在
-    if source_material_id:
-        from ..models.material import Material
-        material = db.query(Material).filter(Material.id == source_material_id).first()
-        if material:
-            material.status = 0
+        # 回退关联素材状态为"未拆解"，因为骨架已不存在
+        if source_material_id:
+            from ..models.material import Material
+            material = db.query(Material).filter(Material.id == source_material_id).first()
+            if material:
+                material.status = 0
+
+        return no_content_response()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Delete skeleton {skeleton_id} failed: {e}", exc_info=True)
+        return error(f"删除骨架失败: {str(e)}", 500)
 
 
 @router.get("/{skeleton_id}/effects")
 def get_skeleton_effects(skeleton_id: int, db: Session = Depends(get_db)):
     """
     聚合查询指定骨架所有裂变记录的效果数据。
-
-    返回该骨架下所有裂变记录的效果数据汇总，按日期聚合，
-    用于骨架详情页效果趋势图和裂变对比表。
-
-    返回值:
-        dict: {
-            "trend": [{date, avg_roi, avg_ctr, total_cost, total_revenue, count}],
-            "fissions": [{id, fission_mode, new_topic, output_status, predicted_ctr, predicted_roi,
-                          effect_summary: {roi, ctr, cost, revenue}, created_at}]
-        }
     """
-    skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
-    if not skeleton:
-        raise HTTPException(status_code=404, detail="骨架不存在")
+    try:
+        skeleton = db.query(Skeleton).filter(Skeleton.id == skeleton_id).first()
+        if not skeleton:
+            return error("骨架不存在", 404)
 
-    from ..models.fission import Fission
-    from ..models.effect_data import EffectData
-    from sqlalchemy import func
+        from ..models.fission import Fission
+        from ..models.effect_data import EffectData
+        from sqlalchemy import func
 
-    # 获取该骨架的所有裂变记录
-    fissions = db.query(Fission).filter(Fission.skeleton_id == skeleton_id).all()
+        fissions = db.query(Fission).filter(Fission.skeleton_id == skeleton_id).all()
 
-    # 批量获取所有效果数据（一次查询）
-    fission_ids = [f.id for f in fissions]
-    effects = []
-    if fission_ids:
-        effects = db.query(EffectData).filter(EffectData.fission_id.in_(fission_ids)).all()
+        fission_ids = [f.id for f in fissions]
+        effects = []
+        if fission_ids:
+            effects = db.query(EffectData).filter(EffectData.fission_id.in_(fission_ids)).all()
 
-    # 按 fission_id 分组效果数据
-    effects_by_fission = {}
-    for e in effects:
-        effects_by_fission.setdefault(e.fission_id, []).append(e)
+        effects_by_fission = {}
+        for e in effects:
+            effects_by_fission.setdefault(e.fission_id, []).append(e)
 
-    # 组装裂变记录 + 效果汇总
-    fission_results = []
-    all_effects_for_trend = []
-    for f in fissions:
-        eff_arr = effects_by_fission.get(f.id, [])
-        summary = None
-        if eff_arr:
-            total_cost = sum(e.cost or 0 for e in eff_arr)
-            total_revenue = sum(e.revenue or 0 for e in eff_arr)
-            avg_roi = sum(e.roi or 0 for e in eff_arr) / len(eff_arr)
-            avg_ctr = sum(e.ctr or 0 for e in eff_arr) / len(eff_arr)
-            summary = {
-                "roi": round(float(avg_roi), 2),
-                "ctr": round(float(avg_ctr), 2),
-                "cost": round(float(total_cost), 2),
-                "revenue": round(float(total_revenue), 2),
-            }
-            all_effects_for_trend.extend(eff_arr)
+        fission_results = []
+        all_effects_for_trend = []
+        for f in fissions:
+            eff_arr = effects_by_fission.get(f.id, [])
+            summary = None
+            if eff_arr:
+                total_cost = sum(e.cost or 0 for e in eff_arr)
+                total_revenue = sum(e.revenue or 0 for e in eff_arr)
+                avg_roi = sum(e.roi or 0 for e in eff_arr) / len(eff_arr)
+                avg_ctr = sum(e.ctr or 0 for e in eff_arr) / len(eff_arr)
+                summary = {
+                    "roi": round(float(avg_roi), 2),
+                    "ctr": round(float(avg_ctr), 2),
+                    "cost": round(float(total_cost), 2),
+                    "revenue": round(float(total_revenue), 2),
+                }
+                all_effects_for_trend.extend(eff_arr)
 
-        fission_results.append({
-            "id": f.id,
-            "fission_mode": f.fission_mode,
-            "new_topic": f.new_topic,
-            "new_category": f.new_category,
-            "output_status": f.output_status,
-            "predicted_ctr": f.predicted_ctr,
-            "predicted_roi": f.predicted_roi,
-            "effect_summary": summary,
-            "created_at": str(f.created_at) if f.created_at else None,
-        })
+            fission_results.append({
+                "id": f.id,
+                "fission_mode": f.fission_mode,
+                "new_topic": f.new_topic,
+                "new_category": f.new_category,
+                "output_status": f.output_status,
+                "predicted_ctr": f.predicted_ctr,
+                "predicted_roi": f.predicted_roi,
+                "effect_summary": summary,
+                "created_at": str(f.created_at) if f.created_at else None,
+            })
 
-    # 按日期聚合趋势数据
-    date_map = {}
-    for e in all_effects_for_trend:
-        d = str(e.stat_date) if e.stat_date else ""
-        if not d:
-            continue
-        if d not in date_map:
-            date_map[d] = {"rois": [], "ctrs": [], "costs": [], "revenues": []}
-        if e.roi is not None:
-            date_map[d]["rois"].append(float(e.roi))
-        if e.ctr is not None:
-            date_map[d]["ctrs"].append(float(e.ctr))
-        if e.cost is not None:
-            date_map[d]["costs"].append(float(e.cost))
-        if e.revenue is not None:
-            date_map[d]["revenues"].append(float(e.revenue))
+        date_map = {}
+        for e in all_effects_for_trend:
+            d = str(e.stat_date) if e.stat_date else ""
+            if not d:
+                continue
+            if d not in date_map:
+                date_map[d] = {"rois": [], "ctrs": [], "costs": [], "revenues": []}
+            if e.roi is not None:
+                date_map[d]["rois"].append(float(e.roi))
+            if e.ctr is not None:
+                date_map[d]["ctrs"].append(float(e.ctr))
+            if e.cost is not None:
+                date_map[d]["costs"].append(float(e.cost))
+            if e.revenue is not None:
+                date_map[d]["revenues"].append(float(e.revenue))
 
-    trend = []
-    for d in sorted(date_map.keys()):
-        entry = date_map[d]
-        trend.append({
-            "date": d,
-            "avg_roi": round(sum(entry["rois"]) / len(entry["rois"]), 2) if entry["rois"] else None,
-            "avg_ctr": round(sum(entry["ctrs"]) / len(entry["ctrs"]), 2) if entry["ctrs"] else None,
-            "total_cost": round(sum(entry["costs"]), 2),
-            "total_revenue": round(sum(entry["revenues"]), 2),
-            "count": len(entry["rois"]),
-        })
+        trend = []
+        for d in sorted(date_map.keys()):
+            entry = date_map[d]
+            trend.append({
+                "date": d,
+                "avg_roi": round(sum(entry["rois"]) / len(entry["rois"]), 2) if entry["rois"] else None,
+                "avg_ctr": round(sum(entry["ctrs"]) / len(entry["ctrs"]), 2) if entry["ctrs"] else None,
+                "total_cost": round(sum(entry["costs"]), 2),
+                "total_revenue": round(sum(entry["revenues"]), 2),
+                "count": len(entry["rois"]),
+            })
 
-    return {"trend": trend, "fissions": fission_results}
+        return success({"trend": trend, "fissions": fission_results})
+    except Exception as e:
+        logger.error(f"Get skeleton effects {skeleton_id} failed: {e}", exc_info=True)
+        return error(f"查询骨架效果数据失败: {str(e)}", 500)
 
 
-@router.post("/from-dismantle/{dismantle_id}")
+@router.post("/from-dismantle/{dismantle_id}", status_code=201)
 def create_skeleton_from_dismantle(dismantle_id: int, db: Session = Depends(get_db)):
     """
     从已有的拆解记录中自动提取骨架并存入骨架库。
-
-    提取逻辑：从拆解记录的 L3 结构层智能推断骨架类型，
-    将 L2（策略）、L3（结构）、L4（元素）层数据组合为新的骨架记录。
-    同时更新拆解记录的 skeleton_id 外键关联。
-
-    请求参数：
-        dismantle_id (int): 拆解记录的唯一标识 ID。
-
-    返回值：
-        dict: 包含 skeleton_id（新建骨架ID）、name（骨架名称）和 message（操作结果描述）的字典。
-
-    异常：
-        HTTP 404: 当拆解记录不存在时抛出。
     """
-    from ..models.dismantle import Dismantle
+    try:
+        from ..models.dismantle import Dismantle
 
-    # 首先检查拆解记录是否存在
-    dismantle = db.query(Dismantle).filter(Dismantle.id == dismantle_id).first()
-    if not dismantle:
-        raise HTTPException(status_code=404, detail="拆解记录不存在")
+        dismantle = db.query(Dismantle).filter(Dismantle.id == dismantle_id).first()
+        if not dismantle:
+            return error("拆解记录不存在", 404)
 
-    # 幂等检查：如果该拆解记录已经提取过骨架，直接返回已有的
-    if dismantle.skeleton_id:
-        existing = db.query(Skeleton).filter(Skeleton.id == dismantle.skeleton_id).first()
-        if existing:
-            return {"skeleton_id": existing.id, "name": existing.name, "message": "该拆解记录已提取过骨架，返回已有骨架"}
+        # 幂等检查
+        if dismantle.skeleton_id:
+            existing = db.query(Skeleton).filter(Skeleton.id == dismantle.skeleton_id).first()
+            if existing:
+                return success({"skeleton_id": existing.id, "name": existing.name, "message": "该拆解记录已提取过骨架，返回已有骨架"})
 
-    # 根据 L3 结构层的段落名称推断骨架类型（如"测评对比型"、"红黑榜型"等）
-    skeleton_type = _infer_skeleton_type(dismantle.l3_structure)
+        skeleton_type = _infer_skeleton_type(dismantle.l3_structure)
+        name = f"{skeleton_type} — {dismantle.l1_topic or '未命名'}"[:100]
 
-    # 拼接骨架名称：类型 + 主题，截断至 100 字符以内
-    name = f"{skeleton_type} — {dismantle.l1_topic or '未命名'}"[:100]
+        from ..models.material import Material
+        material = db.query(Material).filter(Material.id == dismantle.material_id).first()
+        platform = material.platform if material else None
 
-    # 从关联素材获取平台信息
-    from ..models.material import Material
-    material = db.query(Material).filter(Material.id == dismantle.material_id).first()
-    platform = material.platform if material else None
+        style_tags = _extract_style_tags(dismantle.l4_elements)
 
-    # 从 L4 元素层提取风格标签（如钩子类型、过渡方式等），而非使用 L2 策略标签
-    style_tags = _extract_style_tags(dismantle.l4_elements)
+        skeleton = Skeleton(
+            name=name,
+            skeleton_type=skeleton_type,
+            source_material_id=dismantle.material_id,
+            strategy_desc=dismantle.l2_emotion,
+            structure_json=dismantle.l3_structure,
+            elements_json=dismantle.l4_elements,
+            style_tags=style_tags,
+            platform=platform,
+        )
+        db.add(skeleton)
+        db.flush()
 
-    # 从拆解记录的各层数据中提取骨架所需的字段
-    skeleton = Skeleton(
-        name=name,
-        skeleton_type=skeleton_type,
-        source_material_id=dismantle.material_id,  # 关联原始素材
-        strategy_desc=dismantle.l2_emotion,         # 策略层 -> 策略描述
-        structure_json=dismantle.l3_structure,       # 结构层 -> 骨架 JSON
-        elements_json=dismantle.l4_elements,         # 元素层 -> 元素 JSON
-        style_tags=style_tags,                       # 从 L4 提取的风格标签
-        platform=platform,                           # 继承素材的平台
-    )
-    db.add(skeleton)
-    db.flush()  # .flush() 获取自增 ID 但不提交事务
+        dismantle.skeleton_id = skeleton.id
 
-    # 更新拆解记录的外键关联，建立拆解与骨架的映射关系
-    dismantle.skeleton_id = skeleton.id
-
-    db.commit()
-    db.refresh(skeleton)
-    log_operation(db, "skeleton", skeleton.id, "create", {"name": name, "skeleton_type": skeleton_type, "source_dismantle_id": dismantle_id})
-    return {"skeleton_id": skeleton.id, "name": name, "message": "骨架提取成功"}
+        db.commit()
+        db.refresh(skeleton)
+        log_operation(db, "skeleton", skeleton.id, "create", {"name": name, "skeleton_type": skeleton_type, "source_dismantle_id": dismantle_id})
+        return created_response(_skeleton_to_dict(skeleton))
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Create skeleton from dismantle {dismantle_id} failed: {e}", exc_info=True)
+        return error(f"提取骨架失败: {str(e)}", 500)
 
 
 def _infer_skeleton_type(l3_structure) -> str:
-    """
-    根据 L3 内容结构中的段落名称自动推断骨架类型。
-
-    判断逻辑：解析 L3 结构数组中的段落 name 字段，通过关键词匹配确定骨架类型。
-
-    匹配规则：
-        含"测评"或"对比" -> "测评对比型"
-        含"红榜"或"黑榜" -> "红黑榜型"
-        含"误区"         -> "误区纠正型"
-        含"步骤"         -> "教程步骤型"
-        其他              -> "通用型"
-
-    参数：
-        l3_structure: L3 结构数据，可以是 JSON 字符串或已解析的 list。
-
-    返回值：
-        str: 推断出的骨架类型名称。
-    """
-    # 空值兜底：若 L3 结构为空，返回默认的"通用型"
+    """根据 L3 内容结构中的段落名称自动推断骨架类型。"""
     if not l3_structure:
         return "通用型"
 
     import json
-    # 若传入的是 JSON 字符串，先解析为 Python 对象
     structure = json.loads(l3_structure) if isinstance(l3_structure, str) else l3_structure
-
-    # 提取所有段落的 name 字段拼接为逗号分隔的字符串，便于关键词匹配
     names = [s.get("name", "") for s in structure]
     names_str = ",".join(names)
 
-    # 根据段落名称中的关键词判定骨架类型（按匹配数量取最优）
     scores = {
         "测评对比型": sum(1 for kw in ("测评", "对比", "横评", "实测", "亲测") if kw in names_str),
         "红黑榜型":  sum(1 for kw in ("红榜", "黑榜", "榜单", "推荐", "排行") if kw in names_str),
@@ -404,18 +335,7 @@ def _infer_skeleton_type(l3_structure) -> str:
 
 
 def _extract_style_tags(l4_elements) -> list:
-    """
-    从 L4 元素层数据中提取风格标签。
-
-    L4 元素层包含钩子句式、标题公式、过渡方式、互动引导等，
-    这些元素决定了素材的视觉/表达风格，适合作为骨架的风格标签。
-
-    参数：
-        l4_elements: L4 元素数据，可以是 JSON 字符串或已解析的 dict。
-
-    返回值：
-        list: 风格标签字符串列表。
-    """
+    """从 L4 元素层数据中提取风格标签。"""
     if not l4_elements:
         return []
 
@@ -425,65 +345,52 @@ def _extract_style_tags(l4_elements) -> list:
         return []
 
     tags = []
-    # 提取钩子类型作为风格标签
-    hook = elements.get("hook", "")
-    if hook:
-        tags.append(hook)
-    # 提取标题公式作为风格标签
-    title_formula = elements.get("title_formula", "")
-    if title_formula:
-        tags.append(title_formula)
-    # 提取过渡方式
-    transition = elements.get("transition", "")
-    if transition:
-        tags.append(transition)
-    # 提取互动引导方式
-    interaction = elements.get("interaction", "")
-    if interaction:
-        tags.append(interaction)
-
+    for key in ("hook", "title_formula", "transition", "interaction"):
+        val = elements.get(key, "")
+        if val:
+            tags.append(val)
     return tags
 
 
 @router.post("/import")
 def import_skeletons(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """
-    批量导入骨架（JSON 格式）。
+    """批量导入骨架（JSON 格式）。"""
+    try:
+        content = file.file.read().decode("utf-8")
+        items = json.loads(content)
+        if not isinstance(items, list):
+            return error("JSON 格式错误：根节点必须是数组", 400)
 
-    接收 JSON 文件，格式为骨架对象数组：
-    [{"name":"...", "skeleton_type":"测评对比型", "strategy_desc":"...", "structure_json":[...], "elements_json":{...}}, ...]
-
-    返回导入结果：成功数 / 跳过数（名称已存在则跳过）。
-    """
-    content = file.file.read().decode("utf-8")
-    items = json.loads(content)
-    if not isinstance(items, list):
-        raise HTTPException(status_code=400, detail="JSON 格式错误：根节点必须是数组")
-
-    inserted = 0
-    skipped = 0
-    for item in items:
-        name = item.get("name", "").strip()
-        if not name:
-            skipped += 1
-            continue
-        existing = db.query(Skeleton).filter(Skeleton.name == name).first()
-        if existing:
-            skipped += 1
-            continue
-        db.add(Skeleton(
-            name=name,
-            skeleton_type=item.get("skeleton_type"),
-            strategy_desc=item.get("strategy_desc"),
-            structure_json=item.get("structure_json"),
-            elements_json=item.get("elements_json"),
-            style_tags=item.get("style_tags"),
-            platform=item.get("platform"),
-        ))
-        inserted += 1
-    db.commit()
-    log_operation(db, "skeleton", 0, "import", {"inserted": inserted, "skipped": skipped})
-    return {"inserted": inserted, "skipped": skipped, "message": f"导入完成：新增 {inserted} 条，跳过 {skipped} 条"}
+        inserted = 0
+        skipped = 0
+        for item in items:
+            name = item.get("name", "").strip()
+            if not name:
+                skipped += 1
+                continue
+            existing = db.query(Skeleton).filter(Skeleton.name == name).first()
+            if existing:
+                skipped += 1
+                continue
+            db.add(Skeleton(
+                name=name,
+                skeleton_type=item.get("skeleton_type"),
+                strategy_desc=item.get("strategy_desc"),
+                structure_json=item.get("structure_json"),
+                elements_json=item.get("elements_json"),
+                style_tags=item.get("style_tags"),
+                platform=item.get("platform"),
+            ))
+            inserted += 1
+        db.commit()
+        log_operation(db, "skeleton", 0, "import", {"inserted": inserted, "skipped": skipped})
+        return success({"inserted": inserted, "skipped": skipped, "message": f"导入完成：新增 {inserted} 条，跳过 {skipped} 条"})
+    except json.JSONDecodeError:
+        return error("JSON 格式无效", 400)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Import skeletons failed: {e}", exc_info=True)
+        return error(f"导入失败: {str(e)}", 500)
 
 
 @router.get("/export")
@@ -493,56 +400,51 @@ def export_skeletons(
     skeleton_type: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """
-    导出骨架数据，支持 JSON 和 CSV 格式。
+    """导出骨架数据，支持 JSON 和 CSV 格式。"""
+    try:
+        query = db.query(Skeleton)
+        if platform:
+            query = query.filter(Skeleton.platform == platform)
+        if skeleton_type:
+            query = query.filter(Skeleton.skeleton_type == skeleton_type)
 
-    参数：
-        format: json（默认）或 csv
-        platform / skeleton_type: 可选筛选条件
+        items = query.order_by(Skeleton.id).all()
+        rows = []
+        for i in items:
+            rows.append({
+                "id": i.id,
+                "name": i.name,
+                "skeleton_type": i.skeleton_type,
+                "strategy_desc": i.strategy_desc,
+                "structure_json": json.dumps(i.structure_json, ensure_ascii=False) if i.structure_json else "",
+                "elements_json": json.dumps(i.elements_json, ensure_ascii=False) if i.elements_json else "",
+                "style_tags": json.dumps(i.style_tags, ensure_ascii=False) if i.style_tags else "",
+                "platform": i.platform,
+                "usage_count": i.usage_count,
+                "avg_roi": float(i.avg_roi) if i.avg_roi else None,
+                "avg_ctr": float(i.avg_ctr) if i.avg_ctr else None,
+            })
 
-    返回：文件下载响应。
-    """
-    query = db.query(Skeleton)
-    if platform:
-        query = query.filter(Skeleton.platform == platform)
-    if skeleton_type:
-        query = query.filter(Skeleton.skeleton_type == skeleton_type)
+        timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_operation(db, "skeleton", 0, "export", {"format": format, "count": len(rows)})
 
-    items = query.order_by(Skeleton.id).all()
-    rows = []
-    for i in items:
-        rows.append({
-            "id": i.id,
-            "name": i.name,
-            "skeleton_type": i.skeleton_type,
-            "strategy_desc": i.strategy_desc,
-            "structure_json": json.dumps(i.structure_json, ensure_ascii=False) if i.structure_json else "",
-            "elements_json": json.dumps(i.elements_json, ensure_ascii=False) if i.elements_json else "",
-            "style_tags": json.dumps(i.style_tags, ensure_ascii=False) if i.style_tags else "",
-            "platform": i.platform,
-            "usage_count": i.usage_count,
-            "avg_roi": float(i.avg_roi) if i.avg_roi else None,
-            "avg_ctr": float(i.avg_ctr) if i.avg_ctr else None,
-        })
+        if format == "csv":
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys() if rows else ["id"])
+            writer.writeheader()
+            writer.writerows(rows)
+            output.seek(0)
+            return StreamingResponse(
+                io.BytesIO(output.getvalue().encode("utf-8-sig")),
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f"attachment; filename=skeletons_{timestamp}.csv"},
+            )
 
-    timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_operation(db, "skeleton", 0, "export", {"format": format, "count": len(rows)})
-
-    if format == "csv":
-        output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=rows[0].keys() if rows else ["id"])
-        writer.writeheader()
-        writer.writerows(rows)
-        output.seek(0)
         return StreamingResponse(
-            io.BytesIO(output.getvalue().encode("utf-8-sig")),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=skeletons_{timestamp}.csv"},
+            io.BytesIO(json.dumps(rows, ensure_ascii=False, indent=2).encode("utf-8")),
+            media_type="application/json; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=skeletons_{timestamp}.json"},
         )
-
-    # JSON
-    return StreamingResponse(
-        io.BytesIO(json.dumps(rows, ensure_ascii=False, indent=2).encode("utf-8")),
-        media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=skeletons_{timestamp}.json"},
-    )
+    except Exception as e:
+        logger.error(f"Export skeletons failed: {e}", exc_info=True)
+        return error(f"导出失败: {str(e)}", 500)

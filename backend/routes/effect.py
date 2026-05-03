@@ -13,6 +13,7 @@
   DELETE /api/effect/{id}           - 删除效果数据
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -23,36 +24,15 @@ from ..models.effect_data import EffectData
 from ..models.fission import Fission
 from ..models.skeleton import Skeleton
 from ..services.operation_log import log_operation
+from ..response import success, created as created_response, no_content as no_content_response, error
 
-# 创建效果数据专用路由器，设置路由前缀和标签
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["效果数据"])
 
 
 class EffectCreate(BaseModel):
-    """
-    效果数据创建/更新模型，用于录入素材的投放效果数据。
-
-    字段说明：
-        material_id (int):   素材 ID，标识效果数据归属的原始素材。
-        fission_id (int):   裂变 ID，若效果数据来自裂变素材则填写，触发骨架统计更新。
-        platform (str):     投放平台，如 "抖音"、"快手"。
-        impressions (int):  曝光量，素材被展示的总次数。
-        clicks (int):       点击量，用户点击素材的总次数。
-        ctr (float):        点击率（Click-Through Rate），点击/曝光的百分比。
-        conversions (int):  转化量，完成目标行为（如购买）的次数。
-        cvr (float):        转化率（Conversion Rate），转化/点击的百分比。
-        cost (float):       投放花费（元）。
-        revenue (float):    投放带来的收入（元）。
-        roi (float):        投资回报率，收入/花费的比值。
-        cpa (float):        单次转化成本，花费/转化的比值。
-        stat_date (date):   数据统计日期，格式 YYYY-MM-DD。
-
-    自动推导规则（传入原始数据时自动计算衍生指标）：
-        ctr:    clicks / impressions * 100
-        cvr:    conversions / clicks * 100
-        roi:    revenue / cost
-        cpa:    cost / conversions
-    """
+    """效果数据创建/更新模型"""
     material_id: Optional[int] = None
     fission_id: Optional[int] = None
     platform: Optional[str] = None
@@ -69,12 +49,7 @@ class EffectCreate(BaseModel):
 
 
 def _auto_calculate(data: dict) -> dict:
-    """
-    根据原始数据自动推导衍生指标。
-
-    传入 impressions/clicks/conversions/cost/revenue 时，
-    自动计算 ctr/cvr/roi/cpa，减少手动填写工作量。
-    """
+    """根据原始数据自动推导衍生指标。"""
     imp = data.get("impressions")
     clk = data.get("clicks")
     conv = data.get("conversions")
@@ -94,17 +69,8 @@ def _auto_calculate(data: dict) -> dict:
 
 
 def _update_skeleton_stats(db, skeleton_id: int):
-    """
-    更新指定骨架的效果统计（按展示量加权平均）。
-
-    加权算法：
-      - avg_roi = SUM(revenue) / SUM(cost)  （整体投入产出比）
-      - avg_ctr = SUM(clicks) / SUM(impressions) * 100  （整体点击率）
-    相比简单 AVG，加权平均更能反映真实投放效果，避免小样本数据扭曲统计。
-
-    效果闭环：投放回写 effect_data -> 更新 skeleton.avg_roi/avg_ctr -> 指导下次裂变选骨架。
-    """
-    from sqlalchemy import func, case
+    """更新指定骨架的效果统计（按展示量加权平均）。"""
+    from sqlalchemy import func
 
     result = db.query(
         func.sum(EffectData.revenue).label("total_revenue"),
@@ -135,10 +101,7 @@ def _update_skeleton_stats(db, skeleton_id: int):
 
 
 def _update_fission_actual(db, fission_id: int):
-    """
-    更新裂变记录的实际效果指标。
-    取该裂变记录最新的效果数据（按日期倒序）更新 actual_roi 和 actual_ctr。
-    """
+    """更新裂变记录的实际效果指标。"""
     from sqlalchemy import desc
     fission = db.query(Fission).filter(Fission.id == fission_id).first()
     if not fission:
@@ -178,136 +141,133 @@ def _effect_to_dict(e: EffectData) -> dict:
     }
 
 
-# ============================================================
-# 路由：注意路由顺序，具体路径在前，参数路径在后
-# ============================================================
-
-
-@router.post("/")
+@router.post("/", status_code=201)
 def create_effect(data: EffectCreate, db: Session = Depends(get_db)):
-    """
-    录入素材的投放效果数据。
+    """录入素材的投放效果数据。"""
+    try:
+        if not data.fission_id and not data.material_id:
+            return error("fission_id 和 material_id 至少需要传入一个", 400)
 
-    核心逻辑：
-      1. 自动推导衍生指标（CTR/CVR/ROI/CPA）
-      2. 将效果数据写入 effect_data 表
-      3. 如果关联了 fission_id，同步更新裂变记录的实际 ROI 和 CTR
-      4. 触发骨架统计更新（效果闭环）
-    """
-    if not data.fission_id and not data.material_id:
-        raise HTTPException(status_code=400, detail="fission_id 和 material_id 至少需要传入一个")
+        raw = data.model_dump(exclude_unset=True)
+        raw = _auto_calculate(raw)
+        effect = EffectData(**raw)
+        db.add(effect)
 
-    raw = data.model_dump(exclude_unset=True)
-    raw = _auto_calculate(raw)
-    effect = EffectData(**raw)
-    db.add(effect)
+        if data.fission_id:
+            _update_fission_actual(db, data.fission_id)
+            fission = db.query(Fission).filter(Fission.id == data.fission_id).first()
+            if fission:
+                _update_skeleton_stats(db, fission.skeleton_id)
 
-    if data.fission_id:
-        _update_fission_actual(db, data.fission_id)
-        fission = db.query(Fission).filter(Fission.id == data.fission_id).first()
-        if fission:
-            _update_skeleton_stats(db, fission.skeleton_id)
-
-    db.commit()
-    db.refresh(effect)
-    log_operation(db, "effect_data", effect.id, "create", {"fission_id": data.fission_id, "roi": raw.get("roi")})
-    return _effect_to_dict(effect)
+        db.commit()
+        db.refresh(effect)
+        log_operation(db, "effect_data", effect.id, "create", {"fission_id": data.fission_id, "roi": raw.get("roi")})
+        return created_response(_effect_to_dict(effect))
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Create effect failed: {e}", exc_info=True)
+        return error(f"录入效果数据失败: {str(e)}", 500)
 
 
 @router.get("/fission/{fission_id}")
 def get_fission_effects(fission_id: int, db: Session = Depends(get_db)):
-    """
-    查询指定裂变素材的所有效果数据记录（按日期升序）。
-    注意：此路由必须注册在 /{id} 之前。
-    """
-    effects = (
-        db.query(EffectData)
-        .filter(EffectData.fission_id == fission_id)
-        .order_by(EffectData.stat_date.asc())
-        .all()
-    )
-    return [_effect_to_dict(e) for e in effects]
+    """查询指定裂变素材的所有效果数据记录（按日期升序）。"""
+    try:
+        effects = (
+            db.query(EffectData)
+            .filter(EffectData.fission_id == fission_id)
+            .order_by(EffectData.stat_date.asc())
+            .all()
+        )
+        return success([_effect_to_dict(e) for e in effects])
+    except Exception as e:
+        logger.error(f"Get fission effects {fission_id} failed: {e}", exc_info=True)
+        return error(f"查询失败: {str(e)}", 500)
 
 
 @router.get("/{effect_id}")
 def get_effect(effect_id: int, db: Session = Depends(get_db)):
     """查询单条效果数据详情。"""
-    effect = db.query(EffectData).filter(EffectData.id == effect_id).first()
-    if not effect:
-        raise HTTPException(status_code=404, detail="效果数据不存在")
-    return _effect_to_dict(effect)
+    try:
+        effect = db.query(EffectData).filter(EffectData.id == effect_id).first()
+        if not effect:
+            return error("效果数据不存在", 404)
+        return success(_effect_to_dict(effect))
+    except Exception as e:
+        logger.error(f"Get effect {effect_id} failed: {e}", exc_info=True)
+        return error(f"查询失败: {str(e)}", 500)
 
 
 @router.put("/{effect_id}")
 def update_effect(effect_id: int, data: EffectCreate, db: Session = Depends(get_db)):
-    """
-    编辑效果数据。支持部分更新，自动重新推导衍生指标。
-    编辑后同步更新裂变记录实际效果和骨架统计。
-    """
-    effect = db.query(EffectData).filter(EffectData.id == effect_id).first()
-    if not effect:
-        raise HTTPException(status_code=404, detail="效果数据不存在")
+    """编辑效果数据。支持部分更新，自动重新推导衍生指标。"""
+    try:
+        effect = db.query(EffectData).filter(EffectData.id == effect_id).first()
+        if not effect:
+            return error("效果数据不存在", 404)
 
-    raw = data.model_dump(exclude_unset=True)
-    # 合并现有数据与新数据，重新计算衍生指标
-    merged = {
-        "impressions": raw.get("impressions", effect.impressions),
-        "clicks": raw.get("clicks", effect.clicks),
-        "conversions": raw.get("conversions", effect.conversions),
-        "cost": raw.get("cost", float(effect.cost) if effect.cost else None),
-        "revenue": raw.get("revenue", float(effect.revenue) if effect.revenue else None),
-        "ctr": raw.get("ctr", float(effect.ctr) if effect.ctr else None),
-        "cvr": raw.get("cvr", float(effect.cvr) if effect.cvr else None),
-        "roi": raw.get("roi", float(effect.roi) if effect.roi else None),
-        "cpa": raw.get("cpa", float(effect.cpa) if effect.cpa else None),
-    }
-    merged = _auto_calculate(merged)
+        raw = data.model_dump(exclude_unset=True)
+        merged = {
+            "impressions": raw.get("impressions", effect.impressions),
+            "clicks": raw.get("clicks", effect.clicks),
+            "conversions": raw.get("conversions", effect.conversions),
+            "cost": raw.get("cost", float(effect.cost) if effect.cost else None),
+            "revenue": raw.get("revenue", float(effect.revenue) if effect.revenue else None),
+            "ctr": raw.get("ctr", float(effect.ctr) if effect.ctr else None),
+            "cvr": raw.get("cvr", float(effect.cvr) if effect.cvr else None),
+            "roi": raw.get("roi", float(effect.roi) if effect.roi else None),
+            "cpa": raw.get("cpa", float(effect.cpa) if effect.cpa else None),
+        }
+        merged = _auto_calculate(merged)
 
-    for key, value in raw.items():
-        setattr(effect, key, value)
-    # 覆盖计算后的衍生指标
-    for key in ("ctr", "cvr", "roi", "cpa"):
-        if merged.get(key) is not None:
-            setattr(effect, key, merged[key])
+        for key, value in raw.items():
+            setattr(effect, key, value)
+        for key in ("ctr", "cvr", "roi", "cpa"):
+            if merged.get(key) is not None:
+                setattr(effect, key, merged[key])
 
-    # 同步更新裂变记录和骨架统计
-    if effect.fission_id:
-        _update_fission_actual(db, effect.fission_id)
-        fission = db.query(Fission).filter(Fission.id == effect.fission_id).first()
-        if fission:
-            _update_skeleton_stats(db, fission.skeleton_id)
+        if effect.fission_id:
+            _update_fission_actual(db, effect.fission_id)
+            fission = db.query(Fission).filter(Fission.id == effect.fission_id).first()
+            if fission:
+                _update_skeleton_stats(db, fission.skeleton_id)
 
-    db.commit()
-    db.refresh(effect)
-    log_operation(db, "effect_data", effect.id, "update", {"roi": merged.get("roi")})
-    return _effect_to_dict(effect)
+        db.commit()
+        db.refresh(effect)
+        log_operation(db, "effect_data", effect.id, "update", {"roi": merged.get("roi")})
+        return success(_effect_to_dict(effect))
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Update effect {effect_id} failed: {e}", exc_info=True)
+        return error(f"更新失败: {str(e)}", 500)
 
 
 @router.delete("/{effect_id}")
 def delete_effect(effect_id: int, db: Session = Depends(get_db)):
-    """
-    删除效果数据。
-    删除后同步更新裂变记录实际效果和骨架统计。
-    """
-    effect = db.query(EffectData).filter(EffectData.id == effect_id).first()
-    if not effect:
-        raise HTTPException(status_code=404, detail="效果数据不存在")
+    """删除效果数据。删除后同步更新裂变记录实际效果和骨架统计。"""
+    try:
+        effect = db.query(EffectData).filter(EffectData.id == effect_id).first()
+        if not effect:
+            return error("效果数据不存在", 404)
 
-    fission_id = effect.fission_id
-    skeleton_id = None
-    if fission_id:
-        fission = db.query(Fission).filter(Fission.id == fission_id).first()
-        if fission:
-            skeleton_id = fission.skeleton_id
+        fission_id = effect.fission_id
+        skeleton_id = None
+        if fission_id:
+            fission = db.query(Fission).filter(Fission.id == fission_id).first()
+            if fission:
+                skeleton_id = fission.skeleton_id
 
-    db.delete(effect)
-    db.commit()
+        db.delete(effect)
+        db.commit()
 
-    # 同步更新
-    if fission_id:
-        _update_fission_actual(db, fission_id)
-        if skeleton_id:
-            _update_skeleton_stats(db, skeleton_id)
+        if fission_id:
+            _update_fission_actual(db, fission_id)
+            if skeleton_id:
+                _update_skeleton_stats(db, skeleton_id)
 
-    log_operation(db, "effect_data", effect_id, "delete", {"fission_id": fission_id})
-    return {"message": "效果数据已删除"}
+        log_operation(db, "effect_data", effect_id, "delete", {"fission_id": fission_id})
+        return no_content_response()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Delete effect {effect_id} failed: {e}", exc_info=True)
+        return error(f"删除失败: {str(e)}", 500)

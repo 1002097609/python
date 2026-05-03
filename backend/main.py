@@ -5,14 +5,43 @@ FastAPI 应用主入口模块
 - 创建 FastAPI 应用实例
 - 注册全局中间件（CORS 跨域支持）
 - 挂载所有 API 路由
-- 应用启动时自动初始化数据库
-
-启动时调用 init_db() 确保数据库和所有表已创建。
+- 全局异常处理器
+- 健康检查端点
+- 优雅启停（lifespan）
 """
-from fastapi import FastAPI
+
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from .database import init_db
+from fastapi.responses import JSONResponse
+from .database import init_db, engine
 from .routes import api_router
+from .response import success, BusinessException
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    应用生命周期管理：
+    - 启动时：初始化数据库
+    - 关闭时：释放数据库连接池
+    """
+    logger.info("Application starting up...")
+    init_db()
+    logger.info("Database initialized")
+    yield
+    logger.info("Application shutting down...")
+    engine.dispose()
+    logger.info("Database connections released")
+
 
 # ============================================================
 # 创建 FastAPI 应用实例
@@ -21,6 +50,7 @@ app = FastAPI(
     title="素材拆解与裂变系统",
     description="营销素材拆解、骨架管理与裂变引擎",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # ============================================================
@@ -36,6 +66,29 @@ app.add_middleware(
     allow_headers=["*"],          # 允许所有请求头
 )
 
+
+# ============================================================
+# 全局异常处理器
+# ============================================================
+@app.exception_handler(BusinessException)
+async def business_exception_handler(request: Request, exc: BusinessException):
+    """处理业务异常，返回统一格式的错误响应"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.status_code, "message": exc.detail, "data": None},
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """兜底异常处理器，捕获所有未处理的异常，避免直接暴露堆栈信息"""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"code": 500, "message": "服务器内部错误", "data": None},
+    )
+
+
 # ============================================================
 # 挂载 API 路由
 # ============================================================
@@ -45,25 +98,7 @@ app.include_router(api_router)
 
 
 # ============================================================
-# 应用启动事件
-# ============================================================
-@app.on_event("startup")
-def on_startup():
-    """
-    应用启动回调函数
-
-    在 FastAPI 启动完成、开始接收请求之前执行：
-    - 连接到 MySQL 数据库
-    - 如果数据库不存在则自动创建
-    - 如果数据表不存在则自动建表（SQLAlchemy create_all）
-
-    这保证了应用每次启动时数据库结构都是最新的。
-    """
-    init_db()
-
-
-# ============================================================
-# 根路径健康检查
+# 健康检查端点
 # ============================================================
 @app.get("/")
 def root():
@@ -73,4 +108,15 @@ def root():
     Returns:
         dict: 包含系统名称和 API 文档地址的欢迎信息
     """
-    return {"message": "素材拆解与裂变系统 API", "docs": "/docs"}
+    return success({"message": "素材拆解与裂变系统 API", "docs": "/docs"})
+
+
+@app.get("/health")
+def health_check():
+    """
+    健康检查端点 — 供负载均衡器 / K8s 存活探针使用
+
+    Returns:
+        dict: 服务状态信息
+    """
+    return success({"status": "healthy", "service": "material-system"})

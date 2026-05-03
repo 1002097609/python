@@ -81,7 +81,12 @@
       "Bash(powershell *)",
       "Bash(npx vue-tsc *)",
       "Bash(git *)",
-      "Bash(xxd)"
+      "Bash(xxd)",
+      "Bash(env)",
+      "Bash(lsof -ti:8081)",
+      "Bash(xargs kill *)",
+      "Bash(findstr :8081)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

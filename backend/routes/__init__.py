@@ -43,7 +43,7 @@ api_router.include_router(skeleton_router, prefix="/skeleton", tags=["骨架库"
 api_router.include_router(fission_router, prefix="/fission", tags=["裂变引擎"])
 
 # 注册效果数据路由：录入和查询投放效果数据（CTR、ROI 等）
-api_router.include_router(effect_router, tags=["效果数据"])
+api_router.include_router(effect_router, prefix="/effect", tags=["效果数据"])
 
 # 注册选项数据路由（旧版兼容）：按分组返回下拉框选项
 api_router.include_router(options_router, prefix="/options", tags=["选项数据(旧)"])

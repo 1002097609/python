@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "D:\claude_demo\demo2\demo\backend\server.py", line 25, in <module>
+    from backend.database import init_db   # 数据库初始化函数
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'backend'
